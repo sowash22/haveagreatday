@@ -161,14 +161,14 @@ export async function fetchForecast(latitude: number, longitude: number, signal?
   weatherUrl.search = new URLSearchParams({
     ...coordinates,
     hourly: "apparent_temperature,precipitation_probability,weather_code,wind_gusts_10m,is_day",
-    forecast_hours: "24",
+    forecast_days: "7",
     timezone: "auto",
   }).toString();
   const airUrl = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
   airUrl.search = new URLSearchParams({
     ...coordinates,
     hourly: "us_aqi,uv_index",
-    forecast_hours: "24",
+    forecast_days: "7",
     timezone: "auto",
   }).toString();
 

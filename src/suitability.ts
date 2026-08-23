@@ -1,5 +1,6 @@
 export type Profile = "general" | "air" | "temperature" | "strenuous";
 export type Units = "metric" | "imperial";
+export type TimePreference = "any" | "morning" | "afternoon" | "evening";
 
 export type HourConditions = {
   time: string;
@@ -29,6 +30,13 @@ export type Recommendation = {
   hours: number[];
   limited: boolean;
   limitation: string | null;
+};
+
+export type DayPlan = {
+  date: string;
+  conditions: HourConditions[];
+  recommendation: Recommendation;
+  score: number | null;
 };
 
 const WEIGHTS: Record<Profile, Record<ComponentName, number>> = {
@@ -160,4 +168,32 @@ export function recommend(conditions: HourConditions[], profile: Profile, curren
     limited: true,
     limitation: "No future daylight hour with complete weather data was available in this forecast.",
   };
+}
+
+const TIME_RANGES: Record<TimePreference, [number, number]> = {
+  any: [0, 24],
+  morning: [5, 12],
+  afternoon: [12, 17],
+  evening: [17, 22],
+};
+
+export function recommendDays(conditions: HourConditions[], profile: Profile, currentLocalHour: string, timePreference: TimePreference): DayPlan[] {
+  const days = new Map<string, HourConditions[]>();
+  const [startHour, endHour] = TIME_RANGES[timePreference];
+
+  for (const condition of conditions) {
+    const hour = Number(condition.time.slice(11, 13));
+    if (condition.isDay !== true || hour < startHour || hour >= endHour) continue;
+    const date = condition.time.slice(0, 10);
+    const day = days.get(date) ?? [];
+    day.push(condition);
+    days.set(date, day);
+  }
+
+  return [...days].map(([date, dayConditions]) => {
+    const recommendation = recommend(dayConditions, profile, currentLocalHour);
+    const selected = recommendation.hours.flatMap((index) => recommendation.ratings[index] ? [recommendation.ratings[index]] : []);
+    const score = selected.length ? Math.round(selected.reduce((sum, rating) => sum + rating.score, 0) / selected.length) : null;
+    return { date, conditions: dayConditions, recommendation, score };
+  });
 }

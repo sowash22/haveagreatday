@@ -1,33 +1,28 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Newsreader } from "next/font/google";
+import { Geist } from "next/font/google";
 import type { ReactNode } from "react";
 import "../styles.css";
 
-const bodyFont = IBM_Plex_Sans({
+const bodyFont = Geist({
   subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-ibm-plex-sans",
-  display: "swap",
-});
-
-const displayFont = Newsreader({
-  subsets: ["latin"],
-  weight: ["300", "700"],
-  variable: "--font-newsreader",
+  variable: "--font-geist",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "SafeDay — Find a more favorable time outside",
-    template: "%s — SafeDay",
+    default: "SafeDay: Plan a better time outside",
+    template: "%s: SafeDay",
   },
-  description: "Compare weather, air quality, UV, and apparent temperature to find a more favorable time for outdoor activity.",
+  description: "Compare the next seven days to plan a walk, run, ride, dog walk, or park visit around weather, air quality, UV, and temperature.",
+  other: {
+    "impeccable-contract": "seed=f9dbe9d4; direction=canon-weather; mode=operate; variance=6; motion=3; density=3; brief=.impeccable/surfaces/src-app-safe-day-app-tsx.md",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
+    <html lang="en" className={bodyFont.variable} data-scroll-behavior="smooth">
       <body>{children}</body>
     </html>
   );

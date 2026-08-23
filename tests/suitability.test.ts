@@ -3,6 +3,7 @@ import {
   aqiPenalty,
   rateHour,
   recommend,
+  recommendDays,
   temperaturePenalty,
   uvPenalty,
   weatherPenalty,
@@ -83,5 +84,21 @@ describe("recommendation windows", () => {
     const result = recommend(hours, "general", "2026-08-23T17:00");
     expect(result.hours).toEqual([0]);
     expect(result.limited).toBe(true);
+  });
+
+  it("builds separate day plans and respects the preferred time of day", () => {
+    const hours = [
+      completeHour("2026-08-23T09:00", { precipitationProbability: 80 }),
+      completeHour("2026-08-23T10:00", { precipitationProbability: 80 }),
+      completeHour("2026-08-23T18:00"),
+      completeHour("2026-08-23T19:00"),
+      completeHour("2026-08-24T18:00", { precipitationProbability: 30 }),
+      completeHour("2026-08-24T19:00", { precipitationProbability: 30 }),
+    ];
+
+    const plans = recommendDays(hours, "general", "2026-08-23T08:00", "evening");
+    expect(plans.map((plan) => plan.date)).toEqual(["2026-08-23", "2026-08-24"]);
+    expect(plans[0]?.conditions.map((hour) => hour.time)).toEqual(["2026-08-23T18:00", "2026-08-23T19:00"]);
+    expect(plans[0]?.score).toBeLessThan(plans[1]?.score ?? 100);
   });
 });

@@ -2,4 +2,5 @@ node_modules/
 dist/
 out/
 .next/
+.impeccable/questions/
 .DS_Store

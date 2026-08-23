@@ -1,5 +1,5 @@
 {
-  "date": "2026-08-22",
-  "signals": "No existing font, palette, motion, spacing, or framework signals.",
-  "framework": "vanilla TypeScript + Vite"
+  "date": "2026-08-23",
+  "signals": "Plus Jakarta Sans + JetBrains Mono via next/font; Hum OKLCH tokens; 4-point spacing; restrained responsive motion.",
+  "framework": "Next.js 16 App Router + React 19"
 }

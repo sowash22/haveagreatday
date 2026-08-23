@@ -1,61 +1,73 @@
-/* Hallmark · tokens: Almanac · paper-band: light · display-style: roman-serif · accent-hue: cool */
 :root {
-  --color-paper: oklch(97% 0.008 145);
-  --color-paper-2: oklch(94% 0.012 145);
-  --color-paper-3: oklch(91% 0.014 145);
-  --color-ink: oklch(20% 0.018 190);
-  --color-ink-2: oklch(32% 0.02 190);
-  --color-muted: oklch(43% 0.018 190);
-  --color-rule: oklch(78% 0.018 160);
-  --color-rule-strong: oklch(57% 0.025 185);
-  --color-accent: oklch(48% 0.13 225);
-  --color-accent-ink: oklch(98% 0.006 145);
-  --color-focus: oklch(52% 0.17 250);
-  --color-error: oklch(47% 0.17 28);
-  --color-error-paper: oklch(94% 0.025 28);
-  --color-success: oklch(39% 0.1 155);
-  --color-success-paper: oklch(93% 0.03 155);
-  --color-caution: oklch(43% 0.1 75);
-  --color-caution-paper: oklch(94% 0.045 90);
-  --color-poor: oklch(43% 0.12 28);
-  --color-poor-paper: oklch(93% 0.035 28);
+  --color-page: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef1f5;
+  --color-ink: #162033;
+  --color-ink-2: #4f5d72;
+  --color-muted: #66758c;
+  --color-rule: #d8dee8;
+  --color-rule-strong: #aeb8c8;
+  --color-accent: #3976c8;
+  --color-accent-deep: #24599f;
+  --color-accent-soft: #eaf3ff;
+  --color-accent-ink: #132844;
+  --color-focus: #0a66d8;
+  --color-error: #a52f3d;
+  --color-error-soft: #fff0f2;
+  --color-backdrop: rgb(14 24 40 / 58%);
+  --color-shadow: rgb(22 32 51 / 11%);
 
-  --font-display: var(--font-newsreader), ui-serif, serif;
-  --font-body: var(--font-ibm-plex-sans), ui-sans-serif, sans-serif;
-  --font-fallback-serif: ui-serif, serif;
+  --font-display: var(--font-geist), system-ui, sans-serif;
+  --font-body: var(--font-geist), system-ui, sans-serif;
 
-  --space-3xs: 0.125rem;
   --space-2xs: 0.25rem;
   --space-xs: 0.5rem;
   --space-sm: 0.75rem;
   --space-md: 1rem;
   --space-lg: 1.5rem;
-  --space-xl: 2.5rem;
-  --space-2xl: 4rem;
-  --space-3xl: 6rem;
-  --space-4xl: 9rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 5rem;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
-  --text-md: 1.25rem;
-  --text-lg: 1.5625rem;
-  --text-xl: 1.953rem;
-  --text-2xl: 2.441rem;
-  --text-display: clamp(2.75rem, 5vw + 1rem, 5.25rem);
+  --text-md: 1.125rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-display: clamp(2.75rem, 6.2vw, 5.5rem);
 
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-micro: 100ms;
-  --dur-short: 180ms;
-  --dur-long: 360ms;
-
-  --rule-hairline: 1px;
-  --rule-strong: 2px;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-round: 50%;
+  --radius-input: 0.625rem;
+  --radius-card: 1rem;
+  --radius-pill: 999px;
+  --control-height: 2.875rem;
   --page-gutter: clamp(1rem, 4vw, 3rem);
-  --page-width: 82rem;
+  --page-width: 76rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 180ms;
+  --dur-long: 520ms;
+  --z-sticky: 20;
+  --z-modal: 40;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #10141b;
+    --color-surface: #171d27;
+    --color-surface-muted: #202734;
+    --color-ink: #f1f5fb;
+    --color-ink-2: #bcc7d8;
+    --color-muted: #9eabc0;
+    --color-rule: #303a49;
+    --color-rule-strong: #536075;
+    --color-accent: #77a9ed;
+    --color-accent-deep: #a8c9f5;
+    --color-accent-soft: #18283d;
+    --color-accent-ink: #edf5ff;
+    --color-focus: #8fc0ff;
+    --color-error: #ff9fab;
+    --color-error-soft: #351d24;
+    --color-backdrop: rgb(0 0 0 / 72%);
+    --color-shadow: rgb(0 0 0 / 28%);
+  }
 }
