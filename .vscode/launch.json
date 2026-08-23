@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "node",
+            "runtimeExecutable": "/opt/homebrew/bin/npm",
+            "request": "launch",
+            "runtimeArgs": [
+                "run",
+                "dev",
+                "--",
+                "--port",
+                "3004"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "serverReadyAction": {
+                "pattern": "Local:\\s+(https?://\\S+)",
+                "uriFormat": "%s",
+                "action": "debugWithChrome"
+            }
+        },
+        {
+            "name": "Open iOS in Xcode",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "/opt/homebrew/bin/npm",
+            "runtimeArgs": [
+                "run",
+                "ios:open"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

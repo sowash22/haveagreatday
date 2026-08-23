@@ -4,12 +4,12 @@ This plan implements the MVP defined in [PRD.md](./PRD.md). It intentionally sto
 
 ## 1. Fixed technical decisions
 
-- Vanilla TypeScript, HTML, and CSS
-- Vite for development and production builds
+- Next.js App Router with one React client component
+- TypeScript and CSS
 - Vitest for the scoring and API-parsing tests
 - Browser `fetch`, Geolocation, URL, `Intl`, and `localStorage` APIs
 - Direct browser requests to Open-Meteo
-- No frontend framework, state library, component library, chart library, backend, or database
+- No state library, component library, chart library, backend, or database
 - Static deployment target; GitHub Pages is the initial default
 
 If a direct API request becomes unreliable because of CORS or rate limits, add one small caching proxy. Do not add a backend speculatively.
@@ -18,25 +18,21 @@ If a direct API request becomes unreliable because of CORS or rate limits, add o
 
 ```text
 .
-├── index.html
+├── next.config.ts
 ├── package.json
 ├── README.md
 ├── PRD.md
 ├── PLAN.md
 ├── public/
-│   ├── favicon.svg
 │   └── robots.txt
 ├── src/
-│   ├── api/
-│   │   ├── geocoding.ts
-│   │   └── openMeteo.ts
-│   ├── domain/
-│   │   ├── model.ts
-│   │   └── suitability.ts
-│   ├── ui/
-│   │   ├── app.ts
-│   │   └── format.ts
-│   ├── main.ts
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   ├── safe-day-app.tsx
+│   │   └── privacy/page.tsx
+│   ├── openMeteo.ts
+│   ├── suitability.ts
 │   └── styles.css
 └── tests/
     ├── openMeteo.test.ts
@@ -88,8 +84,8 @@ Do not expose raw provider response objects outside the API adapter.
 
 ### Phase 0 — project skeleton
 
-- [ ] Initialize the vanilla TypeScript Vite project in the repository root.
-- [ ] Add scripts: `dev`, `build`, `test`, and `preview`.
+- [x] Initialize the Next.js TypeScript project in the repository root.
+- [x] Add scripts: `dev`, `build`, and `test`.
 - [ ] Add a minimal semantic page shell.
 - [ ] Add base CSS variables, focus styles, and responsive container.
 - [ ] Replace the README with setup commands, scope, data sources, and disclaimer.
@@ -316,7 +312,6 @@ npm install
 npm run dev
 npm test
 npm run build
-npm run preview
 ```
 
 ## 11. Explicitly deferred
