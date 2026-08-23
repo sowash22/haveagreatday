@@ -4,7 +4,6 @@ const repository = process.env.GITHUB_REPOSITORY?.split("/")[1];
 const basePath = process.env.GITHUB_ACTIONS && repository ? `/${repository}` : "";
 
 const nextConfig: NextConfig = {
-  output: "export",
   trailingSlash: true,
   basePath,
   allowedDevOrigins: ["127.0.0.1"],

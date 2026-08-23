@@ -121,7 +121,7 @@ Use a centered page shell up to 76rem with a fluid 1rem to 3rem gutter. The plan
 
 The desktop hero pairs answer copy with one image. Below it, keep the seven-day rail horizontal, then place alternatives and hourly evidence in a two-column region. At 760px and below, stack the hero, collapse evidence to one column, retain horizontal scrolling for days and hours, and let the week rail reach the screen gutters. At 320px, preserve readable copy and avoid clipped controls.
 
-All interactive targets are at least 44px. Controls stay compact: a search pill, a small activity select, normal fields, and text links. Do not scale ordinary actions into hero-sized buttons. Support safe-area gutters, keyboard focus, reduced motion, and layouts that do not rely on color alone.
+All interactive targets are at least 44px. Controls stay compact: a search pill, one-tap activity tabs, normal fields, and text links. Do not scale ordinary actions into hero-sized buttons. Support safe-area gutters, keyboard focus, reduced motion, and layouts that do not rely on color alone.
 
 ## Elevation & Depth
 
@@ -143,7 +143,7 @@ Lead with the answer, one everyday-language reason, one honest tradeoff, four co
 
 ### Controls
 
-Location and activity controls remain near the answer but visually secondary. Use 44px minimum targets, persistent focus-visible outlines, and native form behavior. Saved places belong inside location selection. Put preference fields behind the “Adjust activity, time, or units” disclosure.
+Location and activity controls remain near the answer but visually secondary. Activities use a single native-radio tab row so switching takes one tap; do not repeat them in preferences. Use 44px minimum targets, persistent focus-visible outlines, and native form behavior. Saved places belong inside location selection. Put time and unit fields behind the “Adjust time or units” disclosure.
 
 ### Seven-day rail
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
+import { ACTIVITIES, TIME_OPTIONS, type Activity } from "../plan-query";
 import { recommendDays, type DayPlan, type HourConditions, type HourRating, type Profile, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "safeday-activity:v1";
@@ -11,22 +12,6 @@ const UNITS_KEY = "safeday-units";
 const LOCATION_KEY = "safeday-location";
 const LOCATION_HISTORY_KEY = "safeday-locations:v1";
 
-const ACTIVITIES = {
-  walk: { label: "Walk", phrase: "walk", profile: "general" },
-  run: { label: "Run", phrase: "run", profile: "strenuous" },
-  cycle: { label: "Cycle", phrase: "ride", profile: "strenuous" },
-  family: { label: "Park with kids", phrase: "park visit", profile: "temperature" },
-  dog: { label: "Dog walk", phrase: "dog walk", profile: "temperature" },
-} as const satisfies Record<string, { label: string; phrase: string; profile: Profile }>;
-
-const TIME_OPTIONS: Record<TimePreference, string> = {
-  any: "Any daylight",
-  morning: "Morning",
-  afternoon: "Afternoon",
-  evening: "Evening",
-};
-
-type Activity = keyof typeof ACTIVITIES;
 type Status =
   | { kind: "idle" | "loading" | "ready" }
   | { kind: "error"; title: string; message: string; retry: boolean };
@@ -90,7 +75,13 @@ function readSavedLocation(): LocationChoice | null {
 
 function sharedLocation(params: URLSearchParams): LocationChoice | null {
   if (!params.has("lat") || !params.has("lon")) return null;
-  return parseLocation({ name: "Shared approximate location", region: "", country: "", latitude: Number(params.get("lat")), longitude: Number(params.get("lon")) });
+  return parseLocation({
+    name: params.get("place")?.slice(0, 120) || "Shared approximate location",
+    region: params.get("region")?.slice(0, 120) || "",
+    country: params.get("country")?.slice(0, 120) || "",
+    latitude: Number(params.get("lat")),
+    longitude: Number(params.get("lon")),
+  });
 }
 
 function locationLabel(location: LocationChoice): string {
@@ -181,8 +172,8 @@ function reasonSummary(ratings: HourRating[]): string | null {
   return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
 }
 
-function ActivitySelect({ id, value, onChange }: { id: string; value: Activity; onChange: (value: Activity) => void }) {
-  return <label className="select-field" htmlFor={id}><span>Activity</span><select id={id} value={value} onChange={(event) => onChange(event.target.value as Activity)}>{(Object.entries(ACTIVITIES) as Array<[Activity, typeof ACTIVITIES[Activity]]>).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select></label>;
+function ActivityTabs({ name, value, onChange }: { name: string; value: Activity; onChange: (value: Activity) => void }) {
+  return <fieldset className="activity-tabs"><legend>What are you planning?</legend><div>{(Object.entries(ACTIVITIES) as Array<[Activity, typeof ACTIVITIES[Activity]]>).map(([key, item]) => <label key={key}><input type="radio" name={name} value={key} aria-label={item.label} checked={value === key} onChange={() => onChange(key)}/><span>{key === "family" ? "Family" : key === "dog" ? "Dog" : item.label}</span></label>)}</div></fieldset>;
 }
 
 function Timeline({ day, units }: { day: DayPlan; units: Units }) {
@@ -220,6 +211,7 @@ export function SafeDayApp() {
   const [locating, setLocating] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle");
   const [forgotten, setForgotten] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
@@ -232,11 +224,11 @@ export function SafeDayApp() {
     window.setTimeout(() => searchInput.current?.focus(), 0);
   }, []);
 
-  const loadLocation = useCallback(async (choice: LocationChoice) => {
+  const loadLocation = useCallback(async (choice: LocationChoice, date = "") => {
     const rounded = { ...choice, latitude: roundCoordinate(choice.latitude), longitude: roundCoordinate(choice.longitude) };
     setLocation(rounded);
     setForecast(null);
-    setSelectedDate("");
+    setSelectedDate(date);
     setSearchResults([]);
     setSearchMessage(`Showing forecast for ${locationLabel(rounded)}.`);
     setForgotten(false);
@@ -263,15 +255,20 @@ export function SafeDayApp() {
     const requestedActivity = params.get("activity");
     const initialActivity = requestedActivity && Object.hasOwn(ACTIVITIES, requestedActivity) ? requestedActivity as Activity : readChoice<Activity>(ACTIVITY_KEY, Object.keys(ACTIVITIES) as Activity[], legacyActivity);
     const initialUnits = params.get("units") === "imperial" ? "imperial" : readChoice<Units>(UNITS_KEY, ["metric", "imperial"], "metric");
+    const requestedTime = params.get("time");
+    const initialTime = requestedTime && Object.hasOwn(TIME_OPTIONS, requestedTime) ? requestedTime as TimePreference : "any";
+    const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") ?? "") ? params.get("date") ?? "" : "";
     const history = readSavedLocations();
     setActivity(initialActivity);
     setUnits(initialUnits);
+    setTimePreference(initialTime);
     setSavedLocations(history);
     savePreference(ACTIVITY_KEY, initialActivity);
     savePreference(PROFILE_KEY, ACTIVITIES[initialActivity].profile);
     savePreference(UNITS_KEY, initialUnits);
     const initialLocation = sharedLocation(params) ?? readSavedLocation() ?? history[0] ?? null;
-    if (initialLocation) void loadLocation(initialLocation);
+    if (initialLocation) void loadLocation(initialLocation, initialDate);
+    setHydrated(true);
 
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -287,6 +284,25 @@ export function SafeDayApp() {
       if (copyTimer.current) clearTimeout(copyTimer.current);
     };
   }, [loadLocation, openPlaceDialog]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("activity", activity);
+    url.searchParams.set("time", timePreference);
+    url.searchParams.set("units", units);
+    if (selectedDate) url.searchParams.set("date", selectedDate); else url.searchParams.delete("date");
+    if (location) {
+      url.searchParams.set("lat", location.latitude.toFixed(2));
+      url.searchParams.set("lon", location.longitude.toFixed(2));
+      url.searchParams.set("place", location.name);
+      if (location.region) url.searchParams.set("region", location.region); else url.searchParams.delete("region");
+      if (location.country) url.searchParams.set("country", location.country); else url.searchParams.delete("country");
+    } else {
+      for (const key of ["lat", "lon", "place", "region", "country"]) url.searchParams.delete(key);
+    }
+    window.history.replaceState(null, "", url);
+  }, [activity, hydrated, location, selectedDate, timePreference, units]);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -355,10 +371,8 @@ export function SafeDayApp() {
 
   async function copyShareLink() {
     if (!location) return;
-    const url = new URL(window.location.href);
-    url.search = new URLSearchParams({ lat: location.latitude.toFixed(2), lon: location.longitude.toFixed(2), activity, units }).toString();
     try {
-      await navigator.clipboard.writeText(url.toString());
+      await navigator.clipboard.writeText(window.location.href);
       setCopyState("success");
       if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopyState("idle"), 2500);
@@ -411,14 +425,15 @@ export function SafeDayApp() {
     </div></dialog>
 
     <main id="main" className="page-shell app-main">
-      {status.kind === "idle" ? <section className="welcome"><div className="welcome__copy"><h1>Your next good hour outside.</h1><p>SafeDay looks across the week for a better time to walk, run, ride, take the dog out, or head to the park.</p><div className="welcome__actions"><ActivitySelect id="welcome-activity" value={activity} onChange={changeActivity}/><button className="button" type="button" onClick={openPlaceDialog}>Choose a place</button></div><p className="welcome__note">One recommendation, clear reasons, and nearby alternatives.</p></div><div className="welcome__image"><img src="/outdoor-path.png" alt="People walking, cycling, and taking a dog along a waterfront path" width="1536" height="1024" fetchPriority="high"/></div></section> : null}
+      {status.kind === "idle" ? <section className="welcome"><div className="welcome__copy"><h1>Your next good hour outside.</h1><p>SafeDay looks across the week for a better time to walk, run, ride, take the dog out, or head to the park.</p><div className="welcome__actions"><ActivityTabs name="welcome-activity" value={activity} onChange={changeActivity}/><button className="button" type="button" onClick={openPlaceDialog}>Choose a place</button></div><p className="welcome__note">One recommendation, clear reasons, and nearby alternatives.</p></div><div className="welcome__image"><img src="/outdoor-path.png" alt="People walking, cycling, and taking a dog along a waterfront path" width="1536" height="1024" fetchPriority="high"/></div></section> : null}
       {status.kind === "loading" ? <section className="loading-state" role="status" aria-live="polite"><div className="loading-line"/><h1>Looking across the week.</h1><p>Comparing weather, air, UV, and temperature for your activity.</p></section> : null}
       {status.kind === "error" ? <section className="error-state" role="alert"><h1>{status.title}</h1><p>{status.message}</p><div className="error-actions">{status.retry && location ? <button className="button" type="button" onClick={() => void loadLocation(location)}>Retry forecast</button> : null}<button className="button button--soft" type="button" onClick={openPlaceDialog}>Choose another place</button></div></section> : null}
 
       {status.kind === "ready" && location && forecast && activeDay ? <div className="planner">
         <section className="recommendation" data-band={scoreBand(activeDay.score)} aria-labelledby="recommendation-title">
           <div className="recommendation__copy">
-            <div className="recommendation__context"><span>{activeIsTop ? "Best matching window this week" : `Best matching ${dayName(activeDay.date, true)} window`}</span><ActivitySelect id="activity" value={activity} onChange={changeActivity}/></div>
+            <div className="recommendation__context"><span>{activeIsTop ? "Best matching window this week" : `Best matching ${dayName(activeDay.date, true)} window`}</span></div>
+            <ActivityTabs name="activity" value={activity} onChange={changeActivity}/>
             <h1 id="recommendation-title">{dayName(activeDay.date, true)},<br/>{windowLabel(activeDay)}.</h1>
             {activeHours.length > 0 ? <><p className="recommendation__reason">{dayVerdict(activeDay.score)} for your {ACTIVITIES[activity].phrase}. {activeIsTop ? "This window has the strongest overall balance for the week." : `This is ${dayName(activeDay.date, true)}'s strongest matching window.`}</p>{reasonSummary(activeRatings) ? <p className="tradeoff">{reasonSummary(activeRatings)}.</p> : null}<dl className="fact-row"><div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd></div><div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd></div><div><dt>Air</dt><dd>{formatValue(meanAqi, " AQI")}</dd></div><div><dt>UV</dt><dd>{maxUv === null ? "Unavailable" : maxUv.toFixed(1)}</dd></div></dl></> : <p className="empty-copy">Try another time of day or choose one of the available days below.</p>}
             <div className="plan-actions"><button className="text-button" type="button" onClick={() => void copyShareLink()} data-state={copyState === "idle" ? undefined : copyState}>{copyState === "success" ? "Plan link copied" : copyState === "error" ? "Try sharing again" : "Share this plan"}</button><span>Check again before you go.</span></div>
@@ -428,7 +443,7 @@ export function SafeDayApp() {
 
         {warnings.length > 0 ? <aside className="data-warning" role="status"><strong>Some inputs are incomplete.</strong><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></aside> : null}
 
-        <details className="preferences"><summary>Adjust activity, time, or units</summary><div className="preferences__fields"><ActivitySelect id="activity-detail" value={activity} onChange={changeActivity}/><label className="select-field" htmlFor="time-preference"><span>Time of day</span><select id="time-preference" value={timePreference} onChange={(event) => setTimePreference(event.target.value as TimePreference)}>{(Object.entries(TIME_OPTIONS) as Array<[TimePreference, string]>).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><fieldset className="unit-fieldset"><legend>Temperature</legend><label><input type="radio" name="units" value="metric" checked={units === "metric"} onChange={() => changeUnits("metric")}/> °C</label><label><input type="radio" name="units" value="imperial" checked={units === "imperial"} onChange={() => changeUnits("imperial")}/> °F</label></fieldset></div></details>
+        <details className="preferences"><summary>Adjust time or units</summary><div className="preferences__fields"><label className="select-field" htmlFor="time-preference"><span>Time of day</span><select id="time-preference" value={timePreference} onChange={(event) => setTimePreference(event.target.value as TimePreference)}>{(Object.entries(TIME_OPTIONS) as Array<[TimePreference, string]>).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><fieldset className="unit-fieldset"><legend>Temperature</legend><label><input type="radio" name="units" value="metric" checked={units === "metric"} onChange={() => changeUnits("metric")}/> °C</label><label><input type="radio" name="units" value="imperial" checked={units === "imperial"} onChange={() => changeUnits("imperial")}/> °F</label></fieldset></div></details>
 
         <section className="week-section" aria-labelledby="week-title"><div className="section-heading"><h2 id="week-title">The week at a glance</h2><p>Choose any day to see its best {TIME_OPTIONS[timePreference].toLowerCase()} window.</p></div><div className="week-strip" role="group" aria-label="Choose a forecast day">{dayPlans.map((day) => <button type="button" key={day.date} data-band={scoreBand(day.score)} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} onClick={() => setSelectedDate(day.date)}><span>{dayName(day.date)}</span><time dateTime={day.date}>{formatTime(`${day.date}T12:00`, { month: "short", day: "numeric" })}</time><strong>{dayVerdict(day.score)}</strong><small>{day.score === null ? "Try another time" : windowLabel(day)}</small></button>)}</div></section>
 

@@ -1,0 +1,51 @@
+import type { Profile, TimePreference, Units } from "./suitability.ts";
+
+export const ACTIVITIES = {
+  walk: { label: "Walk", phrase: "walk", profile: "general" },
+  run: { label: "Run", phrase: "run", profile: "strenuous" },
+  cycle: { label: "Cycle", phrase: "ride", profile: "strenuous" },
+  family: { label: "Park with kids", phrase: "park visit", profile: "temperature" },
+  dog: { label: "Dog walk", phrase: "dog walk", profile: "temperature" },
+} as const satisfies Record<string, { label: string; phrase: string; profile: Profile }>;
+
+export const TIME_OPTIONS: Record<TimePreference, string> = {
+  any: "Any daylight",
+  morning: "Morning",
+  afternoon: "Afternoon",
+  evening: "Evening",
+};
+
+export type Activity = keyof typeof ACTIVITIES;
+
+export type PlanQuery = {
+  latitude: number;
+  longitude: number;
+  activity: Activity;
+  time: TimePreference;
+  units: Units;
+  date: string | null;
+  place: string;
+};
+
+export class PlanQueryError extends Error {}
+
+export function parsePlanQuery(params: URLSearchParams): PlanQuery {
+  const latitude = Number(params.get("lat"));
+  const longitude = Number(params.get("lon"));
+  if (!params.has("lat") || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new PlanQueryError("lat must be a number from -90 to 90.");
+  if (!params.has("lon") || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new PlanQueryError("lon must be a number from -180 to 180.");
+
+  const activity = params.get("activity") ?? "walk";
+  if (!Object.hasOwn(ACTIVITIES, activity)) throw new PlanQueryError(`activity must be one of: ${Object.keys(ACTIVITIES).join(", ")}.`);
+  const time = params.get("time") ?? "any";
+  if (!Object.hasOwn(TIME_OPTIONS, time)) throw new PlanQueryError(`time must be one of: ${Object.keys(TIME_OPTIONS).join(", ")}.`);
+  const units = params.get("units") ?? "metric";
+  if (units !== "metric" && units !== "imperial") throw new PlanQueryError("units must be metric or imperial.");
+
+  const date = params.get("date");
+  const parsedDate = date ? new Date(`${date}T00:00:00Z`) : null;
+  if (date && (!parsedDate || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date)) throw new PlanQueryError("date must use YYYY-MM-DD.");
+  const place = (params.get("place") ?? "Approximate location").trim().slice(0, 120) || "Approximate location";
+
+  return { latitude, longitude, activity: activity as Activity, time: time as TimePreference, units, date, place };
+}
