@@ -91,7 +91,7 @@ Impeccable seed: `f9dbe9d4`.
 
 **Key Characteristics:**
 
-- One confident recommendation first, with compact location and activity controls.
+- One confident recommendation first, with location visible and personalization secondary.
 - Familiar weather typography, rows, dividers, and horizontal forecast browsing.
 - One blue accent family; neutral surfaces carry everything else.
 - Detail increases progressively from answer, to seven-day comparison, to hourly evidence and method.
@@ -121,7 +121,7 @@ Use a centered page shell up to 76rem with a fluid 1rem to 3rem gutter. The plan
 
 The desktop hero pairs answer copy with one image. Below it, keep the seven-day rail horizontal, then place alternatives and hourly evidence in a two-column region. At 760px and below, stack the hero, collapse evidence to one column, retain horizontal scrolling for days and hours, and let the week rail reach the screen gutters. At 320px, preserve readable copy and avoid clipped controls.
 
-All interactive targets are at least 44px. Controls stay compact: a search pill, one-tap activity tabs, normal fields, and text links. Do not scale ordinary actions into hero-sized buttons. Support safe-area gutters, keyboard focus, reduced motion, and layouts that do not rely on color alone.
+All interactive targets are at least 44px. Controls stay compact: a search pill, optional one-tap activity tabs, normal fields, and text links. Do not scale ordinary actions into hero-sized buttons. Support safe-area gutters, keyboard focus, reduced motion, and layouts that do not rely on color alone.
 
 ## Elevation & Depth
 
@@ -139,11 +139,11 @@ Avoid mixed novelty shapes. Radius communicates containment, not decoration.
 
 ### Recommendation hero
 
-Lead with the answer, one everyday-language reason, one honest tradeoff, four compact facts, and restrained actions. Pair it with a single calm outdoor scene. The image supports the planning context; it must not imply guaranteed conditions, medical safety, endorsements, or a specific person using the product.
+Lead with a plain SafeDay explanation, the answer, one everyday-language reason, one honest tradeoff, and restrained actions. Put forecast measurements behind “Why this time.” Pair the answer with a single calm outdoor scene. The image supports the planning context; it must not imply guaranteed conditions, medical safety, endorsements, or a specific person using the product.
 
 ### Controls
 
-Location and activity controls remain near the answer but visually secondary. Activities use a single native-radio tab row so switching takes one tap; do not repeat them in preferences. Use 44px minimum targets, persistent focus-visible outlines, and native form behavior. Saved places belong inside location selection. Put time and unit fields behind the “Adjust time or units” disclosure.
+Location remains near the answer. Activity is optional and belongs with time and units behind “Personalize your plan,” where a single native-radio tab row keeps switching to one tap. Explain that activity mainly changes heat and air-quality weighting. Use 44px minimum targets, persistent focus-visible outlines, and native form behavior. Saved places belong inside location selection.
 
 ### Seven-day rail
 
@@ -151,7 +151,11 @@ Always show seven comparable day choices in one horizontal rail. Each item carri
 
 ### Progressive details
 
-Show nearby alternatives before hourly conditions. Hourly evidence is a horizontal row with one selected hour and a compact metric detail region. Keep ranking method, data caveats, and forecast freshness available below the core decision rather than competing with it.
+Show an interactive outdoor-fit curve beside nearby alternatives. A native slider lets people explore the day; higher means more favorable, and the copy must identify the 100-point value as a relative forecast score rather than a safety guarantee. Put measurements and their plain-language definitions behind a disclosure. Keep ranking method, data caveats, and forecast freshness available below the core decision rather than competing with it.
+
+### Motion
+
+Use native view transitions when the recommendation changes so the new answer replaces the old one with a short vertical handoff. Disclosures reveal once with a light upward settle. Motion communicates state change and hierarchy, never loops, and collapses to near-instant behavior for reduced-motion preferences.
 
 ### Photography
 

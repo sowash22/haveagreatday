@@ -12,7 +12,7 @@ People deciding when to walk, run, cycle, walk a dog, or take children to a park
 
 ## Product Purpose
 
-SafeDay compares the next seven days of local weather, air quality, UV, and temperature, then recommends a practical outdoor window for the selected activity. Success means the user can choose a day and time with confidence while understanding the main tradeoff.
+SafeDay compares the next seven days of local weather, air quality, UV, and temperature, then recommends a practical outdoor window. Success means the user can choose a day and time with confidence while understanding the main tradeoff.
 
 ## Positioning
 
@@ -20,11 +20,12 @@ SafeDay combines activity-specific conditions into one explained recommendation.
 
 ## Operating Context
 
-The primary workflow is a quick recurring check before making outdoor plans. A user chooses a place and activity once, then returns to see the current best window and nearby alternatives. Saved places and preferences stay on the device.
+The primary workflow is a quick recurring check before making outdoor plans. A user chooses a place, then returns to see the current best window and nearby alternatives. Activity is optional personalization. Saved places and preferences stay on the device.
 
 ## Capabilities and Constraints
 
-- Seven-day activity-aware recommendations.
+- Seven-day recommendations with optional activity weighting.
+- A slider-based hourly outdoor-fit curve using the existing relative forecast ranking.
 - Walk, run, cycle, park with kids, and dog-walk preferences.
 - Daylight, morning, afternoon, and evening windows.
 - Place search, approximate device location, recent places, and shareable coordinates.

@@ -172,26 +172,59 @@ function reasonSummary(ratings: HourRating[]): string | null {
   return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
 }
 
-function ActivityTabs({ name, value, onChange }: { name: string; value: Activity; onChange: (value: Activity) => void }) {
-  return <fieldset className="activity-tabs"><legend>What are you planning?</legend><div>{(Object.entries(ACTIVITIES) as Array<[Activity, typeof ACTIVITIES[Activity]]>).map(([key, item]) => <label key={key}><input type="radio" name={name} value={key} aria-label={item.label} checked={value === key} onChange={() => onChange(key)}/><span>{key === "family" ? "Family" : key === "dog" ? "Dog" : item.label}</span></label>)}</div></fieldset>;
+function updateWithTransition(update: () => void): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !document.startViewTransition) update();
+  else document.startViewTransition(update);
 }
 
-function Timeline({ day, units }: { day: DayPlan; units: Units }) {
+function ActivityTabs({ name, value, onChange }: { name: string; value: Activity; onChange: (value: Activity) => void }) {
+  return <fieldset className="activity-tabs"><legend>Activity (optional)</legend><div>{(Object.entries(ACTIVITIES) as Array<[Activity, typeof ACTIVITIES[Activity]]>).map(([key, item]) => <label key={key}><input type="radio" name={name} value={key} aria-label={item.label} checked={value === key} onChange={() => onChange(key)}/><span>{key === "family" ? "Family" : key === "dog" ? "Dog" : item.label}</span></label>)}</div></fieldset>;
+}
+
+function ConditionExplorer({ day, units, dayLabel }: { day: DayPlan; units: Units; dayLabel: string }) {
   const selected = day.recommendation.hours;
-  const cells = day.conditions.map((hour, index) => ({ hour, rating: day.recommendation.ratings[index], recommended: selected.includes(index) }));
+  const cells = day.conditions.map((hour, index) => {
+    const rating = day.recommendation.ratings[index];
+    return { hour, rating, fit: rating ? Math.max(0, 100 - Math.round(rating.score)) : 0 };
+  });
   const [activeIndex, setActiveIndex] = useState(selected[0] ?? 0);
   const active = cells[activeIndex] ?? cells[0];
 
   if (!active) return <p className="empty-copy">No daylight hours match this time preference.</p>;
 
-  return <div className="hour-browser">
-    <div className="hour-grid" role="group" aria-label="Choose an hour to inspect">{cells.map(({ hour, rating, recommended }, index) => <button type="button" className="hour-cell" data-band={scoreBand(rating?.score ?? null)} data-recommended={recommended || undefined} aria-pressed={activeIndex === index} aria-label={`${formatTime(hour.time, { weekday: "long", hour: "numeric" })}, ${recommended ? "recommended window, " : ""}${rating?.label ?? "data unavailable"}`} key={hour.time} onClick={() => setActiveIndex(index)}><time dateTime={hour.time}>{formatTime(hour.time, { hour: "numeric" })}</time><strong>{recommended ? "Best" : rating?.score ?? "N/A"}</strong></button>)}</div>
-    <section className="hour-detail" aria-live="polite" aria-label="Selected hour details">
-      <div><h3>{formatTime(active.hour.time, { weekday: "long", hour: "numeric" })}</h3><p>{weatherLabel(active.hour.weatherCode)}</p></div>
-      <dl><div><dt>Feels like</dt><dd>{formatTemperature(active.hour.apparentTemperatureC, units)}</dd></div><div><dt>U.S. AQI</dt><dd>{formatValue(active.hour.usAqi)}</dd></div><div><dt>UV</dt><dd>{active.hour.uvIndex === null ? "Unavailable" : active.hour.uvIndex.toFixed(1)}</dd></div><div><dt>Rain</dt><dd>{formatValue(active.hour.precipitationProbability, "%")}</dd></div><div><dt>Wind gust</dt><dd>{formatWind(active.hour.windGustKph, units)}</dd></div></dl>
+  const points = cells.map(({ fit }, index) => ({ x: 24 + index * (592 / Math.max(1, cells.length - 1)), y: 24 + (100 - fit) * 1.16 }));
+  const line = points.map(({ x, y }, index) => `${index ? "L" : "M"}${x} ${y}`).join(" ");
+  const firstPoint = points[0]!;
+  const activePoint = points[activeIndex] ?? firstPoint;
+  const step = points[1] ? points[1].x - firstPoint.x : 20;
+  const firstSelected = selected[0];
+  const lastSelected = selected.at(-1);
+
+  return <section className="condition-explorer" aria-labelledby="explorer-title">
+    <header><h2 id="explorer-title">Explore {dayLabel}</h2><p>Slide through the day. Higher means more favorable.</p></header>
+    <div className="condition-chart">
+      <svg viewBox="0 0 640 176" role="img" aria-label={`Outdoor fit throughout ${dayLabel}`} preserveAspectRatio="none">
+        <line className="chart-guide" x1="24" x2="616" y1="82" y2="82"/>
+        <line className="chart-guide" x1="24" x2="616" y1="140" y2="140"/>
+        {firstSelected !== undefined && lastSelected !== undefined ? <rect className="chart-window" x={Math.max(16, points[firstSelected]!.x - step / 2)} y="12" width={Math.min(608, (lastSelected - firstSelected + 1) * step)} height="140" rx="10"/> : null}
+        <path className="chart-line" d={line} pathLength="1"/>
+        <g className="chart-marker" style={{ transform: `translate(${activePoint.x}px, ${activePoint.y}px)` }}><circle r="7"/><circle r="3"/></g>
+      </svg>
+      <div className="chart-times" aria-hidden="true"><span>{formatTime(cells[0]!.hour.time, { hour: "numeric" })}</span><span>{formatTime(cells.at(-1)!.hour.time, { hour: "numeric" })}</span></div>
+      <label className="visually-hidden" htmlFor="outdoor-fit-hour">Explore the hourly outdoor fit</label>
+      <input id="outdoor-fit-hour" type="range" min="0" max={cells.length - 1} step="1" value={activeIndex} aria-describedby="outdoor-fit-help" aria-valuetext={`${formatTime(active.hour.time, { weekday: "long", hour: "numeric" })}, outdoor fit ${active.fit} out of 100, ${dayVerdict(active.rating?.score ?? null)}`} onChange={(event) => setActiveIndex(Number(event.target.value))}/>
+    </div>
+    <output className="explorer-readout" htmlFor="outdoor-fit-hour" key={active.hour.time}>
+      <div><time dateTime={active.hour.time}>{formatTime(active.hour.time, { weekday: "long", hour: "numeric" })}</time><strong>{active.fit}<small>/100</small></strong></div>
+      <p><strong>{dayVerdict(active.rating?.score ?? null)}</strong><span>{weatherLabel(active.hour.weatherCode)}</span></p>
+      <small id="outdoor-fit-help">A relative forecast score, not a safety guarantee.</small>
+    </output>
+    <div className="explorer-details">
+      <details className="measurements"><summary>See measurements</summary><div className="measurements__body"><dl><div><dt>Feels like</dt><dd>{formatTemperature(active.hour.apparentTemperatureC, units)}</dd></div><div><dt>U.S. AQI</dt><dd>{formatValue(active.hour.usAqi)}</dd></div><div><dt>UV index</dt><dd>{active.hour.uvIndex === null ? "Unavailable" : active.hour.uvIndex.toFixed(1)}</dd></div><div><dt>Chance of rain</dt><dd>{formatValue(active.hour.precipitationProbability, "%")}</dd></div><div><dt>Wind gust</dt><dd>{formatWind(active.hour.windGustKph, units)}</dd></div></dl><p>AQI is the U.S. Air Quality Index. Rain is probability, and wind is the forecast gust speed.</p></div></details>
       {active.rating?.incomplete ? <p className="data-note">Missing {active.rating.missing.join(", ")} data.</p> : null}
-    </section>
-  </div>;
+      <details className="method-note"><summary>How the ranking works</summary><p>SafeDay compares weather, air quality, UV, and feels-like temperature, then chooses the lowest-penalty consecutive daylight hours. Missing values never count as favorable.</p></details>
+    </div>
+  </section>;
 }
 
 export function SafeDayApp() {
@@ -359,14 +392,22 @@ export function SafeDayApp() {
   }
 
   function changeActivity(nextActivity: Activity) {
-    setActivity(nextActivity);
+    updateWithTransition(() => setActivity(nextActivity));
     savePreference(ACTIVITY_KEY, nextActivity);
     savePreference(PROFILE_KEY, ACTIVITIES[nextActivity].profile);
   }
 
   function changeUnits(nextUnits: Units) {
-    setUnits(nextUnits);
+    updateWithTransition(() => setUnits(nextUnits));
     savePreference(UNITS_KEY, nextUnits);
+  }
+
+  function changeTimePreference(nextTime: TimePreference) {
+    updateWithTransition(() => setTimePreference(nextTime));
+  }
+
+  function chooseDate(date: string) {
+    updateWithTransition(() => setSelectedDate(date));
   }
 
   async function copyShareLink() {
@@ -410,6 +451,8 @@ export function SafeDayApp() {
   const currentDate = localHour.slice(0, 10);
   const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
   const dayName = (date: string, long = false) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: long ? "long" : "short" });
+  const preferredWindowLabel = timePreference === "any" ? "daylight" : TIME_OPTIONS[timePreference].toLowerCase();
+  const placePhrase = /approximate|shared/i.test(location?.name ?? "") ? "near you" : `in ${location?.name}`;
 
   return <>
     <a className="skip-link" href="#main">Skip to planner</a>
@@ -425,17 +468,16 @@ export function SafeDayApp() {
     </div></dialog>
 
     <main id="main" className="page-shell app-main">
-      {status.kind === "idle" ? <section className="welcome"><div className="welcome__copy"><h1>Your next good hour outside.</h1><p>SafeDay looks across the week for a better time to walk, run, ride, take the dog out, or head to the park.</p><div className="welcome__actions"><ActivityTabs name="welcome-activity" value={activity} onChange={changeActivity}/><button className="button" type="button" onClick={openPlaceDialog}>Choose a place</button></div><p className="welcome__note">One recommendation, clear reasons, and nearby alternatives.</p></div><div className="welcome__image"><img src="/outdoor-path.png" alt="People walking, cycling, and taking a dog along a waterfront path" width="1536" height="1024" fetchPriority="high"/></div></section> : null}
-      {status.kind === "loading" ? <section className="loading-state" role="status" aria-live="polite"><div className="loading-line"/><h1>Looking across the week.</h1><p>Comparing weather, air, UV, and temperature for your activity.</p></section> : null}
+      {status.kind === "idle" ? <section className="welcome"><div className="welcome__copy"><h1>Your next good hour outside.</h1><p>SafeDay compares the week&apos;s weather, air quality, UV, and temperature to find a better time to be outside.</p><div className="welcome__actions"><button className="button" type="button" onClick={openPlaceDialog}>Choose a place</button></div><p className="welcome__note">One recommendation, clear reasons, and nearby alternatives.</p></div><div className="welcome__image"><img src="/outdoor-path.png" alt="People walking, cycling, and taking a dog along a waterfront path" width="1536" height="1024" fetchPriority="high"/></div></section> : null}
+      {status.kind === "loading" ? <section className="loading-state" role="status" aria-live="polite"><div className="loading-line"/><h1>Looking across the week.</h1><p>Comparing weather, air quality, UV, and temperature.</p></section> : null}
       {status.kind === "error" ? <section className="error-state" role="alert"><h1>{status.title}</h1><p>{status.message}</p><div className="error-actions">{status.retry && location ? <button className="button" type="button" onClick={() => void loadLocation(location)}>Retry forecast</button> : null}<button className="button button--soft" type="button" onClick={openPlaceDialog}>Choose another place</button></div></section> : null}
 
       {status.kind === "ready" && location && forecast && activeDay ? <div className="planner">
         <section className="recommendation" data-band={scoreBand(activeDay.score)} aria-labelledby="recommendation-title">
           <div className="recommendation__copy">
-            <div className="recommendation__context"><span>{activeIsTop ? "Best matching window this week" : `Best matching ${dayName(activeDay.date, true)} window`}</span></div>
-            <ActivityTabs name="activity" value={activity} onChange={changeActivity}/>
+            <p className="recommendation__intro">Planning time outside {placePhrase}? We found {activeIsTop ? "the week’s" : `${dayName(activeDay.date, true)}’s`} most promising window.</p>
             <h1 id="recommendation-title">{dayName(activeDay.date, true)},<br/>{windowLabel(activeDay)}.</h1>
-            {activeHours.length > 0 ? <><p className="recommendation__reason">{dayVerdict(activeDay.score)} for your {ACTIVITIES[activity].phrase}. {activeIsTop ? "This window has the strongest overall balance for the week." : `This is ${dayName(activeDay.date, true)}'s strongest matching window.`}</p>{reasonSummary(activeRatings) ? <p className="tradeoff">{reasonSummary(activeRatings)}.</p> : null}<dl className="fact-row"><div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd></div><div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd></div><div><dt>Air</dt><dd>{formatValue(meanAqi, " AQI")}</dd></div><div><dt>UV</dt><dd>{maxUv === null ? "Unavailable" : maxUv.toFixed(1)}</dd></div></dl></> : <p className="empty-copy">Try another time of day or choose one of the available days below.</p>}
+            {activeHours.length > 0 ? <>{reasonSummary(activeRatings) ? <p className="tradeoff">{reasonSummary(activeRatings)}.</p> : null}<details className="why-details"><summary>Why this time</summary><dl className="fact-row"><div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd></div><div><dt>Chance of rain</dt><dd>{formatValue(maxRain, "%")}</dd></div><div><dt>Air quality</dt><dd>{formatValue(meanAqi, " AQI")}</dd></div><div><dt>UV index</dt><dd>{maxUv === null ? "Unavailable" : maxUv.toFixed(1)}</dd></div></dl></details></> : <p className="empty-copy">Try another time of day or choose one of the available days below.</p>}
             <div className="plan-actions"><button className="text-button" type="button" onClick={() => void copyShareLink()} data-state={copyState === "idle" ? undefined : copyState}>{copyState === "success" ? "Plan link copied" : copyState === "error" ? "Try sharing again" : "Share this plan"}</button><span>Check again before you go.</span></div>
           </div>
           <div className="recommendation__image"><img src="/outdoor-path.png" alt="A calm waterfront path used by walkers, runners, cyclists, families, and dogs" width="1536" height="1024" fetchPriority="high"/></div>
@@ -443,11 +485,11 @@ export function SafeDayApp() {
 
         {warnings.length > 0 ? <aside className="data-warning" role="status"><strong>Some inputs are incomplete.</strong><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></aside> : null}
 
-        <details className="preferences"><summary>Adjust time or units</summary><div className="preferences__fields"><label className="select-field" htmlFor="time-preference"><span>Time of day</span><select id="time-preference" value={timePreference} onChange={(event) => setTimePreference(event.target.value as TimePreference)}>{(Object.entries(TIME_OPTIONS) as Array<[TimePreference, string]>).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><fieldset className="unit-fieldset"><legend>Temperature</legend><label><input type="radio" name="units" value="metric" checked={units === "metric"} onChange={() => changeUnits("metric")}/> °C</label><label><input type="radio" name="units" value="imperial" checked={units === "imperial"} onChange={() => changeUnits("imperial")}/> °F</label></fieldset></div></details>
+        <details className="preferences"><summary>Personalize your plan</summary><div className="preferences__fields"><ActivityTabs name="activity" value={activity} onChange={changeActivity}/><p className="preference-help">Activity is optional. It mainly changes how heat and air quality are weighted.</p><label className="select-field" htmlFor="time-preference"><span>Time of day</span><select id="time-preference" value={timePreference} onChange={(event) => changeTimePreference(event.target.value as TimePreference)}>{(Object.entries(TIME_OPTIONS) as Array<[TimePreference, string]>).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><fieldset className="unit-fieldset"><legend>Temperature</legend><label><input type="radio" name="units" value="metric" checked={units === "metric"} onChange={() => changeUnits("metric")}/> °C</label><label><input type="radio" name="units" value="imperial" checked={units === "imperial"} onChange={() => changeUnits("imperial")}/> °F</label></fieldset></div></details>
 
-        <section className="week-section" aria-labelledby="week-title"><div className="section-heading"><h2 id="week-title">The week at a glance</h2><p>Choose any day to see its best {TIME_OPTIONS[timePreference].toLowerCase()} window.</p></div><div className="week-strip" role="group" aria-label="Choose a forecast day">{dayPlans.map((day) => <button type="button" key={day.date} data-band={scoreBand(day.score)} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} onClick={() => setSelectedDate(day.date)}><span>{dayName(day.date)}</span><time dateTime={day.date}>{formatTime(`${day.date}T12:00`, { month: "short", day: "numeric" })}</time><strong>{dayVerdict(day.score)}</strong><small>{day.score === null ? "Try another time" : windowLabel(day)}</small></button>)}</div></section>
+        <section className="week-section" aria-labelledby="week-title"><div className="section-heading"><h2 id="week-title">The week at a glance</h2><p>Choose any day to see its best {preferredWindowLabel} window.</p></div><div className="week-strip" role="group" aria-label="Choose a forecast day">{dayPlans.map((day) => <button type="button" key={day.date} data-band={scoreBand(day.score)} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} onClick={() => chooseDate(day.date)}><span>{dayName(day.date)}</span><time dateTime={day.date}>{formatTime(`${day.date}T12:00`, { month: "short", day: "numeric" })}</time><strong>{dayVerdict(day.score)}</strong><small>{day.score === null ? "Try another time" : windowLabel(day)}</small></button>)}</div></section>
 
-        <section className="plan-evidence" aria-label="Alternatives and forecast details"><div className="alternatives"><h2>Other options</h2>{alternatives.length ? <div className="alternative-list">{alternatives.map((day) => <button type="button" key={day.date} onClick={() => setSelectedDate(day.date)}><span><strong>{dayName(day.date, true)}</strong><small>{windowLabel(day)}</small></span><span>{dayVerdict(day.score)}</span></button>)}</div> : <p className="empty-copy">No other complete windows match this preference yet.</p>}</div><details className="hourly-details"><summary>See hourly conditions for {dayName(activeDay.date, true)}</summary><div className="hourly-details__body"><Timeline key={`${activeDay.date}-${timePreference}-${activity}`} day={activeDay} units={units}/><details className="method-note"><summary>How the ranking works</summary><p>SafeDay turns each measurement into a 0 to 100 penalty, weights it for your activity, and chooses the lowest average across two consecutive daylight hours. Missing values never count as zero.</p></details></div></details></section>
+        <section className="plan-evidence" aria-label="Alternatives and forecast details"><div className="alternatives"><h2>Other options</h2>{alternatives.length ? <div className="alternative-list">{alternatives.map((day) => <button type="button" key={day.date} onClick={() => chooseDate(day.date)}><span><strong>{dayName(day.date, true)}</strong><small>{windowLabel(day)}</small></span><span>{dayVerdict(day.score)}</span></button>)}</div> : <p className="empty-copy">No other complete windows match this preference yet.</p>}</div><ConditionExplorer key={`${activeDay.date}-${timePreference}-${activity}`} day={activeDay} units={units} dayLabel={dayName(activeDay.date, true)}/></section>
         <aside className="disclaimer"><strong>Use local guidance too.</strong><p>SafeDay compares forecasts. It is not medical advice, pet or child safety guidance, or an emergency warning service.</p></aside>
         <p className="freshness">Updated {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(forecast.fetchedAt))}. Forecast values can change.</p>
       </div> : null}
