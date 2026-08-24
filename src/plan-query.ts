@@ -16,6 +16,14 @@ export const TIME_OPTIONS: Record<TimePreference, string> = {
 };
 
 export type Activity = keyof typeof ACTIVITIES;
+export type SceneKey = Activity | "cloudy" | "rain" | "snow";
+
+export function weatherScene(activity: Activity, code: number | null): SceneKey {
+  if (code !== null && ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))) return "snow";
+  if (code !== null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95)) return "rain";
+  if (code !== null && code >= 45 && code <= 48) return "cloudy";
+  return activity;
+}
 
 export type PlanQuery = {
   latitude: number;

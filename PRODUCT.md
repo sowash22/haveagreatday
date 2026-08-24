@@ -8,47 +8,30 @@ web
 
 ## Users
 
-People deciding when to walk, run, cycle, walk a dog, or take children to a park. They often check quickly on a phone and want one useful answer without interpreting several forecast products.
+People quickly deciding when to walk, run or hike, cycle, walk a dog, or take children outside. Most checks happen on a phone and should take only a few seconds.
 
-## Product Purpose
+## Product purpose
 
-SafeDay compares the next seven days of local weather, air quality, UV, and temperature, then recommends a practical outdoor window. Success means the user can choose a day and time with confidence while understanding the main tradeoff.
+SafeDay compares the next seven days of local weather, air quality, UV, temperature, and daylight, then gives one practical outdoor window. It reduces forecast interpretation without claiming that any hour is universally safe.
 
-## Positioning
+## Primary workflow
 
-SafeDay combines activity-specific conditions into one explained recommendation. It does not claim that any hour is universally safe.
+Choose a place and read one answer. A compact week ribbon shows every upcoming best window and lets the user inspect another day with one tap. Recent places stay on the device. Opening the method disclosure reveals the measurements, tradeoff, caveat, data source, photo credit, and privacy link.
 
-## Operating Context
+## Capabilities and constraints
 
-The primary workflow is a quick recurring check before making outdoor plans. A user chooses a place, then returns to see the current best window and nearby alternatives. Activity is optional personalization. Saved places and preferences stay on the device.
-
-## Capabilities and Constraints
-
-- Seven-day recommendations with optional activity weighting.
-- A slider-based hourly outdoor-fit curve using the existing relative forecast ranking.
-- Walk, run, cycle, park with kids, and dog-walk preferences.
-- Daylight, morning, afternoon, and evening windows.
-- Place search, approximate device location, recent places, and shareable coordinates.
-- Metric and imperial temperature display.
+- One best seven-day recommendation with all seven daily windows visible.
+- Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
+- Place search, approximate device location, recent places, and shareable query parameters.
+- Weather and activity-matched local Unsplash photography.
+- Metric and imperial display honored from saved preference or query parameters.
 - Forecast quality depends on upstream data and is not medical or safety advice.
-- No account, analytics, or long-range monthly forecast.
+- No account, analytics, long-range monthly forecast, or primary-screen data dashboard.
 
-## Brand Commitments
+## Product principles
 
-The product name is SafeDay. The voice is plain, calm, relatable, and honest about uncertainty. Privacy and local device storage are product promises, not secondary legal details.
-
-## Evidence on Hand
-
-The product uses live Open-Meteo weather and air-quality data and an existing tested suitability model. No testimonials, customer counts, performance claims, or lifestyle photography are available and none should be fabricated.
-
-## Product Principles
-
-1. Give the answer before the controls.
-2. Explain the recommendation in everyday language.
-3. Let one visible choice change the result at a time.
-4. Keep advanced evidence available without making it the default experience.
-5. Preserve uncertainty instead of disguising it as safety.
-
-## Accessibility & Inclusion
-
-The planner must remain keyboard accessible, readable at 320 px, usable with 44 px touch targets, compatible with reduced motion, and understandable without relying on color alone.
+1. Give one answer, not a forecast homework assignment.
+2. Keep location effortless to change and the week effortless to scan.
+3. Make the outing emotionally tangible without implying forecast certainty.
+4. Keep evidence and caveats one disclosure away.
+5. Preserve privacy, accessibility, and agent-friendly query parameters.
