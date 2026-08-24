@@ -177,6 +177,7 @@ small, time, dd { font-variant-numeric: tabular-nums; }
 .forecast-conversation__lines p { color: rgb(255 255 255 / 82%); font-size: clamp(0.875rem, 1.25vw, 0.96rem); line-height: 1.4; }
 .forecast-conversation__lines p:nth-child(n + 2) { color: rgb(255 255 255 / 72%); }
 .forecast-conversation__lines strong { color: #fff; font-weight: 740; white-space: nowrap; }
+.forecast-conversation__protection { color: #fff; font-weight: 620; }
 .forecast-conversation__day { max-width: 64ch; display: grid; gap: 0.48rem; }
 .forecast-conversation__day p { color: rgb(255 255 255 / 82%); font-size: clamp(0.875rem, 1.25vw, 0.96rem); line-height: 1.4; }
 .forecast-conversation__day p:last-child { color: rgb(255 255 255 / 68%); }

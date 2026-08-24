@@ -8,6 +8,7 @@ import {
   temperaturePenalty,
   uvPenalty,
   uvCategory,
+  uvProtectionAdvice,
   weatherPenalty,
   type HourConditions,
 } from "../src/suitability.ts";
@@ -36,6 +37,14 @@ describe("component penalties", () => {
   it("uses public UV and AQI category boundaries", () => {
     expect([2, 3, 5, 6, 7, 8, 10, 11].map(uvCategory)).toEqual(["Low", "Moderate", "Moderate", "High", "High", "Very high", "Very high", "Extreme"]);
     expect([50, 51, 100, 101, 150, 151, 200, 201, 300, 301].map(aqiCategory)).toEqual(["Good", "Moderate", "Moderate", "Unhealthy for sensitive groups", "Unhealthy for sensitive groups", "Unhealthy", "Unhealthy", "Very unhealthy", "Very unhealthy", "Hazardous"]);
+  });
+
+  it("adds practical protection only when UV reaches three", () => {
+    expect(uvProtectionAdvice(null)).toBeNull();
+    expect(uvProtectionAdvice(2.9)).toBeNull();
+    expect(uvProtectionAdvice(3)).toContain("Sun protection recommended");
+    expect(uvProtectionAdvice(6)).toContain("High UV");
+    expect(uvProtectionAdvice(8)).toContain("Very high UV");
   });
 
   it("uses the hot and cold temperature boundaries", () => {

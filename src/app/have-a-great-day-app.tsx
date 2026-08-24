@@ -7,7 +7,7 @@ import { assessAdaptiveDay } from "../adaptive-plan";
 import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
-import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
+import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, uvProtectionAdvice, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
 const PROFILE_KEY = "haveagreatday-profile";
@@ -843,7 +843,9 @@ export function HaveAGreatDayApp() {
                 {conversationVoice.mode === "all_day" ? <p className="forecast-conversation__day-summary">{describeConversationDay(conversationInput.assessment.summary)}</p> : null}
                 {conversationVoice.mode !== "none" ? <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{displayedWindows.map((window, index) => {
                   const lead = conversationVoice.leads[index]?.text ?? fallbackVoice?.leads[index]?.text ?? "Another option is";
-                  return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span></p>;
+                  const period = displayedPeriods.find((item) => item.id === window.id);
+                  const protection = uvProtectionAdvice(maxValue(selectedHours(period).map((hour) => hour.uvIndex)));
+                  return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span>{protection ? <span className="forecast-conversation__protection"> {protection}</span> : null}</p>;
                 })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>Choose another day above and we’ll look for a better opening.</p></div>}
                 {excludedWindowNotes.length ? <p className="forecast-conversation__tradeoffs">{excludedWindowNotes.join(" ")}</p> : null}
               </div>

@@ -78,6 +78,13 @@ export function uvCategory(uv: number): "Low" | "Moderate" | "High" | "Very high
   return "Extreme";
 }
 
+export function uvProtectionAdvice(uv: number | null): string | null {
+  if (uv === null || uv < 3) return null;
+  if (uv < 6) return "Sun protection recommended: seek shade and use protective clothing, a hat, sunglasses, and sunscreen.";
+  if (uv < 8) return "High UV: prefer shade and use protective clothing, a hat, sunglasses, and sunscreen.";
+  return "Very high UV: avoid peak sun if possible and use shade, protective clothing, a hat, sunglasses, and sunscreen.";
+}
+
 export function aqiCategory(aqi: number): "Good" | "Moderate" | "Unhealthy for sensitive groups" | "Unhealthy" | "Very unhealthy" | "Hazardous" {
   if (aqi <= 50) return "Good";
   if (aqi <= 100) return "Moderate";
