@@ -3,6 +3,7 @@
 import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationInput, type ConversationVoice } from "../conversation";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { PROFILE_WEIGHTS, rateHour, recommend, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
@@ -141,7 +142,6 @@ const OUTING_PERIODS: Array<{ id: PeriodId; start: number; end: number }> = [
   { id: "night", start: 20, end: 22 },
 ];
 const PERIOD_TIE_PRIORITY: PeriodId[] = ["morning", "evening", "night", "noon"];
-const WINDOW_RANK_LABELS = ["Best", "Next best", "Third best"] as const;
 
 const CHART_METRICS: Array<{ name: ComponentName; color: string; dash?: string }> = [
   { name: "weather", color: "#8ed8ff" },
@@ -302,15 +302,6 @@ function windowLabel(day: WindowPlan | undefined): string {
   return `${formatTime(start, { hour: "numeric" })} to ${formatTime(nextHour(end), { hour: "numeric" }).replace(/\s/g, " ")}`;
 }
 
-function compactWindowLabel(day: WindowPlan): string {
-  const hours = selectedHours(day);
-  const start = hours[0]?.time;
-  const end = hours.at(-1)?.time;
-  if (!start || !end) return "None";
-  const compactTime = (time: string) => formatTime(time, { hour: "numeric" }).replace(/\s/g, "").replace("AM", "a").replace("PM", "p");
-  return `${compactTime(start)}-${compactTime(nextHour(end))}`;
-}
-
 function lightLabel(day: WindowPlan): string {
   const hours = selectedHours(day);
   if (!hours.length) return "No window";
@@ -446,11 +437,13 @@ export function HaveAGreatDayApp() {
   const [sceneSequence, setSceneSequence] = useState(0);
   const [failedSceneSrc, setFailedSceneSrc] = useState("");
   const [chartHour, setChartHour] = useState(12);
+  const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const methodDetails = useRef<HTMLDetailsElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
+  const conversationController = useRef<AbortController | null>(null);
   const unitsOverridden = useRef(false);
   const profile = ACTIVITIES[activity].profile;
 
@@ -531,6 +524,7 @@ export function HaveAGreatDayApp() {
       window.removeEventListener("keydown", handleShortcut);
       searchController.current?.abort();
       forecastController.current?.abort();
+      conversationController.current?.abort();
     };
   }, [loadLocation, openPlaceDialog]);
 
@@ -680,6 +674,31 @@ export function HaveAGreatDayApp() {
   const currentDate = localHour.slice(0, 10);
   const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
   const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
+  const activeDayLabel = activeDay ? dayName(activeDay.date) : "";
+  const conversationInput = useMemo<ConversationInput | null>(() => {
+    if (!activeDay || !activeDayLabel || !location || !recommendedPeriods.length) return null;
+    return {
+      place: location.name === "Approximate device location" ? "Your area" : location.name,
+      day: activeDayLabel,
+      date: activeDay.date,
+      windows: recommendedPeriods.map((period) => {
+        const evidence = periodEvidence(period, units);
+        return {
+          id: period.id,
+          time: windowLabel(period),
+          condition: evidence.condition,
+          temperature: evidence.temperature,
+          aqi: evidence.aqi,
+          uv: evidence.uv,
+          light: lightLabel(period),
+        };
+      }),
+    };
+  }, [activeDay, activeDayLabel, location, recommendedPeriods, units]);
+  const conversationKey = useMemo(() => conversationInput ? JSON.stringify(conversationInput) : "", [conversationInput]);
+  const fallbackVoice = useMemo(() => conversationInput ? fallbackConversationVoice(conversationInput) : null, [conversationInput]);
+  const personalizedVoice = conversationResult?.key === conversationKey ? conversationResult.voice : null;
+  const conversationVoice = personalizedVoice ?? fallbackVoice;
   const sceneHours = selectedHours(activeDay);
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
@@ -719,6 +738,30 @@ export function HaveAGreatDayApp() {
   }, [activeDay?.date, firstWindowStart]);
 
   useEffect(() => {
+    conversationController.current?.abort();
+    if (!conversationInput || !conversationKey) return;
+
+    const controller = new AbortController();
+    conversationController.current = controller;
+    void (async () => {
+      try {
+        const response = await fetch("/api/conversation/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: conversationKey,
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const voice = parseConversationVoice(await response.json(), conversationInput);
+        if (voice && !controller.signal.aborted) setConversationResult({ key: conversationKey, voice });
+      } catch { /* The grounded, deterministic note remains visible. */ }
+    })();
+
+    return () => controller.abort();
+  }, [conversationInput, conversationKey]);
+
+  useEffect(() => {
     const nextScene = scenePool[(sceneIndex + 1) % scenePool.length];
     if (!nextScene || nextScene.src === scene.src) return;
     const image = new window.Image();
@@ -742,7 +785,7 @@ export function HaveAGreatDayApp() {
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
-          <Link className="wordmark wordmark--card" href="/" aria-label="Have a Great Day home">Have a Great Day</Link>
+          <Link className="brand-lockup" href="/" aria-label="Have a Great Day home"><strong>Have a Great Day</strong><small>Let’s find your best times outside.</small></Link>
           <div className="card-controls">
             <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog"><span>{location ? locationLabel(location) : "Choose a place"}</span><kbd>⌘K</kbd></button>
             <button className="unit-toggle" type="button" onClick={toggleUnits} aria-label={`Temperature is shown in ${units === "metric" ? "Celsius" : "Fahrenheit"}. Switch to ${units === "metric" ? "Fahrenheit" : "Celsius"}.`}>{units === "metric" ? "°C" : "°F"}</button>
@@ -760,16 +803,16 @@ export function HaveAGreatDayApp() {
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
           {status.kind === "ready" && location && forecast && activeDay ? <>
             <h1 id="decision-title" className="visually-hidden">Outdoor times for {dayName(activeDay.date)}</h1>
-            <p className="decision-context">{recommendedPeriods.length ? <>{location.name} looks good for some time outside. {recommendedPeriods.length === 3 ? "These are the three strongest windows" : "These are the best windows still available"} after balancing weather, air quality, UV, and comfort.</> : <>No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</>}</p>
-            {recommendedPeriods.length ? <div className="day-windows" data-count={recommendedPeriods.length} role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{recommendedPeriods.map((period, index) => {
-              const evidence = periodEvidence(period, units);
-              return <div role="listitem" key={period.id}>
-                <span>{WINDOW_RANK_LABELS[index] ?? "Alternative"}</span>
-                <strong>{compactWindowLabel(period)}</strong>
-                <small className="window-condition">{evidence.condition} · {lightLabel(period)}</small>
-                <small className="window-metrics">{evidence.temperature} · {evidence.aqi} · {evidence.uv}</small>
-              </div>;
-            })}</div> : null}
+            {conversationInput && conversationVoice ? <section className="forecast-conversation" aria-label={`A personal plan for ${dayName(activeDay.date)}`} aria-live="off">
+              <p className="forecast-conversation__kicker">A little plan for your day</p>
+              <div key={personalizedVoice ? `${conversationKey}:personal` : `${conversationKey}:instant`} className="forecast-conversation__note">
+                <p className="forecast-conversation__opening">{conversationVoice.opening}</p>
+                <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{conversationInput.windows.map((window, index) => {
+                  const lead = conversationVoice.leads[index]?.text ?? fallbackVoice?.leads[index]?.text ?? "Another option is";
+                  return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span></p>;
+                })}</div>
+              </div>
+            </section> : <p className="decision-context">No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</p>}
           </> : null}
         </div>
 
@@ -802,7 +845,7 @@ export function HaveAGreatDayApp() {
       <form className="location-form" onSubmit={handleSearch} noValidate><label htmlFor="city">Search for a city or town</label><div className="input-row"><input ref={searchInput} id="city" name="city" type="search" autoComplete="address-level2" enterKeyHint="search" placeholder="Try Pasadena or Portland" aria-describedby="city-help" aria-invalid={searchError || undefined} value={query} onChange={(event) => { setQuery(event.target.value); if (searchError) setSearchError(false); }} required/><button className="button" type="submit" disabled={searching} aria-busy={searching}>{searching ? "Searching..." : "Search"}</button></div><p id="city-help" className={`field-help${searchError ? " field-help--error" : ""}`} role={searchError ? "alert" : undefined}>{searchMessage}</p></form>
       <button className="button button--soft" type="button" onClick={useApproximateLocation} disabled={locating} aria-busy={locating}>{locating ? "Finding you..." : "Use my location"}</button>
       <div className="search-results" aria-live="polite">{searchResults.length > 0 ? <ul>{searchResults.map((result) => <li key={`${result.latitude}-${result.longitude}`}><button type="button" onClick={() => chooseLocation(result)}><span>{result.name}</span><small>{[result.region, result.country].filter(Boolean).join(", ")}</small></button></li>)}</ul> : null}</div>
-      <div className="privacy-note"><p>No account or first-party analytics. Forecasts use Open-Meteo; photos use Unsplash.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
+      <div className="privacy-note"><p>No account or first-party analytics. Forecasts use Open-Meteo, wording uses our inference service, and photos use Unsplash.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
     </div></dialog>
   </div>;
 }
