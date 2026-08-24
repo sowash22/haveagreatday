@@ -16,7 +16,7 @@ Have a Great Day compares the next seven days of local weather, air quality, UV,
 
 ## Primary workflow
 
-Choose a place and read one answer. A compact week ribbon shows every upcoming best window and lets the user inspect another day with one tap. Recent places stay on the device. Opening the method disclosure reveals the measurements, tradeoff, caveat, data source, photo credit, and privacy link.
+Choose a place and read one answer. A compact week ribbon shows every upcoming best window and lets the user inspect another day with one tap. Recent places stay on the device. Opening the method disclosure reveals the measurements, an explorable 6 AM to 10 PM fit chart, the tradeoff method, data source, photo credit, and privacy link.
 
 ## Capabilities and constraints
 
@@ -24,6 +24,7 @@ Choose a place and read one answer. A compact week ribbon shows every upcoming b
 - Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
 - Place search, approximate device location, recent places, and shareable query parameters.
 - Weather-matched local Unsplash scene pools that advance on refresh and day selection.
+- A normalized hourly-fit chart that compares weather, air, comfort, and UV without mixing incompatible units.
 - Metric and imperial display honored from saved preference or query parameters.
 - Forecast quality depends on upstream data and is not medical or safety advice.
 - No account, analytics, long-range monthly forecast, or primary-screen data dashboard.

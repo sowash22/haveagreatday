@@ -11,7 +11,7 @@ description: A cinematic, one-answer outdoor planner.
 
 ## Hierarchy
 
-The whole planner fits in one normal viewport. The card contains, in order: brand and place search, a compact seven-day best-times ribbon, one recommended day and time, one short explanation, and a collapsed method disclosure. There is no app bar, page footer, activity control, graph, alternatives section, or preferences form on the primary surface.
+The whole planner fits in one normal viewport. The card contains, in order: brand and place search, a compact seven-day best-times ribbon, one recommended day and time, one short explanation, and a collapsed method disclosure. There is no app bar, page footer, activity control, alternatives section, or preferences form on the primary surface. One compact hourly-fit chart belongs inside the disclosure, never on the main decision surface.
 
 Location search opens a focused dialog. Recent places appear first, followed by search and approximate device location. The week ribbon keeps all seven windows comparable and lets one tap replace the main answer.
 
@@ -29,7 +29,7 @@ Use the local, curated Unsplash set as weather-aware scene pools. Clear or fair 
 
 ## Motion
 
-The background softly resolves from blur and a slight scale whenever its scene advances. The next scene preloads so day-to-day exploration feels immediate. Native view transitions hand off recommendation copy. The method disclosure refracts open from the bottom; its compact methodology and sources remain visible inside the more opaque panel. All spatial motion becomes effectively instant with reduced motion enabled.
+The background softly resolves from blur and a slight scale whenever its scene advances. The next scene preloads so day-to-day exploration feels immediate. Native view transitions hand off recommendation copy. The method disclosure refracts open from the bottom and closes on an outside press or Escape. Its compact methodology, normalized hourly-fit lines, and sources remain visible inside the more opaque panel. All spatial motion becomes effectively instant with reduced motion enabled.
 
 ## Responsive and accessible behavior
 

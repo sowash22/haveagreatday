@@ -188,11 +188,10 @@ small, time, dd { font-variant-numeric: tabular-nums; }
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
-.method-details > summary strong { color: #fff; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .method-details__body {
   position: absolute;
   inset: auto 0 calc(100% + 0.65rem) 0;
-  max-height: min(22rem, 58vh);
+  max-height: min(31rem, 76vh);
   display: grid;
   gap: 0.7rem;
   overflow-y: auto;
@@ -223,6 +222,25 @@ small, time, dd { font-variant-numeric: tabular-nums; }
 .method-facts dt { color: rgb(255 255 255 / 62%); }
 .method-facts dd { margin-block-start: 0.1rem; overflow: hidden; color: #fff; font-size: var(--text-base); font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 .method-facts small { display: block; margin-block-start: 0.12rem; color: rgb(255 255 255 / 60%); }
+.hourly-chart { display: grid; gap: 0.25rem; margin: 0.1rem 0 0; }
+.hourly-chart figcaption { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+.hourly-chart figcaption > span { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; }
+.hourly-chart figcaption strong { color: #fff; font-size: var(--text-xs); font-weight: 680; }
+.hourly-chart figcaption small { color: rgb(255 255 255 / 58%); font-size: 0.68rem; line-height: 1.25; }
+.hourly-chart__plot { position: relative; height: 5.25rem; border-radius: 0.5rem; }
+.hourly-chart__plot:focus-within { outline: 2px solid #fff; outline-offset: 3px; }
+.hourly-chart__plot svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.hourly-chart__guide { stroke: rgb(255 255 255 / 10%); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hourly-chart__window { fill: rgb(255 255 255 / 8%); }
+.hourly-chart__line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.hourly-chart__cursor { stroke: rgb(255 255 255 / 76%); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hourly-chart__plot input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; cursor: ew-resize; opacity: 0; }
+.hourly-chart__axis { display: flex; justify-content: space-between; color: rgb(255 255 255 / 46%); font-size: 0.65rem; font-variant-numeric: tabular-nums; }
+.hourly-chart__legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem 0.75rem; margin-block-start: 0.1rem; font-size: 0.7rem; }
+.hourly-chart__legend > span { min-width: 0; display: grid; grid-template-columns: 0.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.3rem; }
+.hourly-chart__legend i { width: 0.4rem; aspect-ratio: 1; border-radius: 50%; }
+.hourly-chart__legend span span { overflow: hidden; color: rgb(255 255 255 / 68%); text-overflow: ellipsis; white-space: nowrap; }
+.hourly-chart__legend strong { color: #fff; font-weight: 670; font-variant-numeric: tabular-nums; }
 .method-breakdown { display: grid; gap: 0.35rem; padding-block-start: 0.35rem; color: rgb(255 255 255 / 64%); font-size: 0.72rem; }
 .method-breakdown__intro { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 0.35rem 0.75rem; }
 .method-breakdown h3 { color: rgb(255 255 255 / 88%); font-size: 0.72rem; font-weight: 680; white-space: nowrap; }
@@ -299,11 +317,14 @@ input[type="search"][aria-invalid="true"] { border-color: var(--color-error); ba
   .week-times button strong { font-size: 0.7rem; }
   .decision-copy { padding: 1rem; }
   .decision-copy h1 { max-width: 11ch; font-size: clamp(2.65rem, 13vw, 4rem); }
-  .method-details__body { max-height: 58vh; }
+  .method-details__body { max-height: 76vh; }
   .method-heading { grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
   .fit-score { min-width: 4.5rem; }
   .fit-score strong { font-size: 2.4rem; }
   .method-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hourly-chart__plot { height: 4.5rem; }
+  .hourly-chart__legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .method-breakdown__intro { grid-template-columns: 1fr; }
   .input-row { grid-template-columns: 1fr; }
   .privacy-note, .statement-footer__meta { align-items: start; flex-direction: column; }
 }
