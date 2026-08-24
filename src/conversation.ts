@@ -115,8 +115,8 @@ export function parseConversationInput(value: unknown): ConversationInput | null
   }
 
   if (allowedModes.includes("windows") !== (windows.length > 0)) return null;
-  if (defaultMode === "windows" && (defaultWindowCount < 1 || defaultWindowCount > windows.length)) return null;
-  if (defaultMode !== "windows" && defaultWindowCount !== 0) return null;
+  if (defaultMode !== "none" && (defaultWindowCount < 2 || defaultWindowCount > windows.length)) return null;
+  if (defaultMode === "none" && defaultWindowCount !== 0) return null;
 
   return { place, day, date, assessment: { allowedModes: allowedModes as SuggestionMode[], defaultMode, defaultWindowCount, favorableHourShare, blockedHourShare, summary }, windows };
 }
@@ -124,16 +124,21 @@ export function parseConversationInput(value: unknown): ConversationInput | null
 export function fallbackConversationVoice(input: ConversationInput): ConversationVoice {
   const day = /^(Today|Tomorrow)$/i.test(input.day) ? input.day.toLowerCase() : input.day;
   const preposition = /^(today|tomorrow)$/i.test(day) ? "" : "on ";
+  const selected = input.windows.slice(0, input.assessment.defaultWindowCount);
+  const fallbackLeads = ["Your easiest option is", "Another comfortable opening is", "You also have a good chance at"];
   if (input.assessment.defaultMode === "all_day") {
-    return { mode: "all_day", opening: `${input.place} has one of those rare, easygoing days ${preposition}${day}.`, selectedIds: [], leads: [] };
+    return {
+      mode: "all_day",
+      opening: `${input.place} has one of those rare, easygoing days ${preposition}${day}. Here are the easiest times to fit around your plans.`,
+      selectedIds: selected.map((window) => window.id),
+      leads: selected.map((window, index) => ({ id: window.id, text: fallbackLeads[index] ?? "Another option is" })),
+    };
   }
   if (input.assessment.defaultMode === "none") {
     return { mode: "none", opening: `I’d choose another day for outdoor plans in ${input.place}.`, selectedIds: [], leads: [] };
   }
 
-  const selected = input.windows.slice(0, input.assessment.defaultWindowCount);
-  const count = selected.length === 1 ? "one worthwhile opening" : selected.length === 2 ? "two worthwhile openings" : "a few worthwhile openings";
-  const fallbackLeads = ["Your strongest option is", "If that does not fit your day, try", "One more good chance comes at"];
+  const count = selected.length === 2 ? "two worthwhile openings" : "a few worthwhile openings";
   return {
     mode: "windows",
     opening: `${input.place} has ${count} ${preposition}${day}.`,
@@ -151,11 +156,11 @@ export function parseConversationVoice(value: unknown, input: ConversationInput)
 
   const selectedIds = value.selectedIds.map(periodId);
   if (selectedIds.some((id) => id === null)) return null;
-  if (mode !== "windows") {
+  if (mode === "none") {
     return selectedIds.length === 0 && value.leads.length === 0 ? { mode, opening, selectedIds: [], leads: [] } : null;
   }
 
-  if (selectedIds.length < 1 || selectedIds.length > input.windows.length || value.leads.length !== selectedIds.length) return null;
+  if (selectedIds.length < 2 || selectedIds.length > input.windows.length || value.leads.length !== selectedIds.length) return null;
   const expectedPrefix = input.windows.slice(0, selectedIds.length).map((window) => window.id);
   if (!selectedIds.every((id, index) => id === expectedPrefix[index])) return null;
 
@@ -205,5 +210,6 @@ export function describeConversationWindow(window: ConversationWindow): string {
 }
 
 export function describeConversationDay(summary: ConversationDaySummary): string {
-  return `${summary.condition}. ${summary.temperature}. ${summary.rain}. ${summary.aqi}. ${summary.uv}. ${summary.light}.`;
+  const lower = (value: string) => value.charAt(0).toLowerCase() + value.slice(1);
+  return `${summary.condition} overall. ${summary.temperature}, ${lower(summary.rain)}, ${lower(summary.aqi)}, and ${summary.uv}. ${summary.light}.`;
 }

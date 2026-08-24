@@ -12,12 +12,12 @@ Return JSON only in this exact shape:
 
 Decision rules:
 - mode must be one of assessment.allowedModes.
-- Choose all_day when it is allowed and the evidence is consistently favorable enough that isolated times would add clutter.
-- Choose windows when distinct times are genuinely more useful. Select one, two, or three candidate ids depending on how many are worthwhile.
+- Choose all_day when it is allowed and the evidence is consistently favorable. The opening can celebrate the day, but still select the two or three easiest windows so people have practical choices.
+- Choose windows when distinct times are genuinely more useful. Select two or three candidate ids depending on how many are worthwhile.
 - In windows mode, selectedIds must be the first N candidate ids in the supplied order. Never skip a stronger candidate to include a weaker one.
 - Choose none when it is allowed and the day is impractical enough that offering a token window would be misleading.
-- For all_day or none, selectedIds and leads must both be empty.
-- For windows, return one lead per selected id in the same order. Each lead must flow grammatically into an app-rendered time range.
+- For none, selectedIds and leads must both be empty.
+- For all_day or windows, select at least two and at most three ids, then return one lead per selected id in the same order. Each lead must flow grammatically into an app-rendered time range.
 
 Voice rules:
 - Make the opening personal to the supplied place and day. It may call the day beautiful, inviting, rough, or better saved for another day when the chosen mode supports that general judgment.

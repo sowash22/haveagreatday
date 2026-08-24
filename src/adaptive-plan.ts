@@ -54,7 +54,7 @@ export function assessAdaptiveDay(hours: HourConditions[], rankedPeriods: Adapti
   ).slice(0, 3);
 
   const poorDay = hours.length === 0
-    || candidates.length === 0
+    || candidates.length < 2
     || (hours.length >= 4 && blockedHourShare >= 0.6)
     || (hours.length >= 4 && usableHourShare < 0.25);
   const allDay = !poorDay
@@ -76,7 +76,8 @@ export function assessAdaptiveDay(hours: HourConditions[], rankedPeriods: Adapti
   }
 
   const bestScore = candidates[0]?.score ?? 100;
-  const defaultWindowCount = Math.max(1, candidates.filter((period) => (period.score ?? 100) <= Math.min(42, bestScore + 14)).length);
+  const comparableWindowCount = candidates.filter((period) => (period.score ?? 100) <= Math.min(42, bestScore + 14)).length;
+  const defaultWindowCount = allDay ? candidates.length : Math.min(candidates.length, Math.max(2, comparableWindowCount));
   const averageScore = ratings.length ? ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length : 100;
   const allowedModes: SuggestionMode[] = [
     ...(allDay ? ["all_day" as const] : []),
@@ -87,7 +88,7 @@ export function assessAdaptiveDay(hours: HourConditions[], rankedPeriods: Adapti
   return {
     allowedModes,
     defaultMode: allDay ? "all_day" : "windows",
-    defaultWindowCount: allDay ? 0 : defaultWindowCount,
+    defaultWindowCount,
     candidateIds: candidates.map((period) => period.id),
     favorableHourShare: Math.round(favorableHourShare * 100),
     blockedHourShare: Math.round(blockedHourShare * 100),

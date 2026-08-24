@@ -58,9 +58,16 @@ describe("conversation voice", () => {
   });
 
   it("accepts all-day and no-recommendation decisions only when allowed", () => {
-    const allDayInput: ConversationInput = { ...input, assessment: { ...input.assessment, allowedModes: ["all_day", "windows"], defaultMode: "all_day", defaultWindowCount: 0 } };
-    expect(parseConversationVoice({ mode: "all_day", opening: "Portland gets one of those beautifully open Saturdays.", selectedIds: [], leads: [] }, allDayInput)?.mode).toBe("all_day");
+    const allDayInput: ConversationInput = { ...input, assessment: { ...input.assessment, allowedModes: ["all_day", "windows"], defaultMode: "all_day", defaultWindowCount: 3 } };
+    expect(parseConversationVoice({ mode: "all_day", opening: "Portland gets one of those beautifully open Saturdays.", selectedIds: ["morning", "evening"], leads: [
+      { id: "morning", text: "The easiest place to start is" },
+      { id: "evening", text: "Another comfortable opening is" },
+    ] }, allDayInput)?.mode).toBe("all_day");
     expect(parseConversationVoice({ mode: "none", opening: "I would save these plans for another day.", selectedIds: [], leads: [] }, input)?.mode).toBe("none");
+  });
+
+  it("requires at least two practical choices when recommending times", () => {
+    expect(parseConversationVoice({ mode: "windows", opening: "Portland has one opening on Saturday.", selectedIds: ["morning"], leads: [{ id: "morning", text: "Start with" }] }, input)).toBeNull();
   });
 
   it("rejects skipped candidates and model-authored forecast claims", () => {
@@ -76,6 +83,18 @@ describe("conversation voice", () => {
     expect(fallback.mode).toBe("windows");
     expect(fallback.selectedIds).toEqual(["morning", "evening"]);
   });
+
+  it("keeps practical choices in the all-day fallback", () => {
+    const allDayInput: ConversationInput = {
+      ...input,
+      assessment: { ...input.assessment, allowedModes: ["all_day", "windows"], defaultMode: "all_day", defaultWindowCount: 3 },
+      windows: [...input.windows.slice(0, 2), { ...input.windows[2]!, id: "noon", time: "12 PM to 2 PM", light: "Daylight" }],
+    };
+    const fallback = fallbackConversationVoice(allDayInput);
+    expect(fallback.mode).toBe("all_day");
+    expect(fallback.selectedIds).toEqual(["morning", "evening", "noon"]);
+    expect(fallback.leads).toHaveLength(3);
+  });
 });
 
 describe("forecast narration", () => {
@@ -84,6 +103,6 @@ describe("forecast narration", () => {
   });
 
   it("states the whole day with every metric", () => {
-    expect(describeConversationDay(input.assessment.summary)).toContain("Rain up to 20%. Air peaks at AQI 31. UV peaks at 4.2.");
+    expect(describeConversationDay(input.assessment.summary)).toContain("rain up to 20%, air peaks at AQI 31, and UV peaks at 4.2.");
   });
 });

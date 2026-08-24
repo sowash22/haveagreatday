@@ -143,6 +143,7 @@ const OUTING_PERIODS: Array<{ id: PeriodId; start: number; end: number }> = [
   { id: "night", start: 20, end: 22 },
 ];
 const PERIOD_TIE_PRIORITY: PeriodId[] = ["morning", "evening", "night", "noon"];
+const PERIOD_NAMES: Record<PeriodId, string> = { morning: "Morning", noon: "Midday", evening: "Evening", night: "Night" };
 
 const CHART_METRICS: Array<{ name: ComponentName; color: string; dash?: string }> = [
   { name: "weather", color: "#8ed8ff" },
@@ -336,7 +337,7 @@ function periodPlans(conditions: HourConditions[], date: string, profile: Profil
       const hour = Number(condition.time.slice(11, 13));
       return hour >= period.start && hour < period.end;
     });
-    const recommendation = recommend(periodConditions, profile, currentLocalHour, { daylightOnly: false });
+    const recommendation = recommend(periodConditions, profile, currentLocalHour, { daylightOnly: true });
     const ratings = recommendation.hours.flatMap((index) => recommendation.ratings[index] ? [recommendation.ratings[index]] : []);
     const score = ratings.length ? Math.round(ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length) : null;
     return { id: period.id, conditions: periodConditions, recommendation, score };
@@ -412,6 +413,26 @@ function tradeoffLabel(value: number | null): string {
 function reasonSummary(ratings: HourRating[]): string | null {
   const reason = ratings.flatMap((rating) => rating.reasons)[0];
   return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
+}
+
+function excludedPeriodNote(period: PeriodPlan, profile: Profile, currentLocalHour: string): string {
+  const future = period.conditions.filter((hour) => hour.time > currentLocalHour);
+  if (!future.length) return `${PERIOD_NAMES[period.id]} has already passed.`;
+  if (future.every((hour) => hour.isDay !== true)) return `${PERIOD_NAMES[period.id]} falls after dark, so it is not part of the plan.`;
+
+  const ratings = future.filter((hour) => hour.isDay === true).map((hour) => rateHour(hour, profile));
+  const tradeoffs = (Object.keys(METRIC_LABELS) as ComponentName[])
+    .map((name) => ({ name, value: componentAverage(ratings, name) }))
+    .filter((item): item is { name: ComponentName; value: number } => item.value !== null)
+    .toSorted((first, second) => second.value - first.value);
+  const reason = tradeoffs[0]?.name;
+  const explanation: Record<ComponentName, string> = {
+    weather: "rain or wind is less inviting",
+    air: "air quality is less favorable",
+    temperature: "it feels less comfortable",
+    uv: "UV is higher",
+  };
+  return `${PERIOD_NAMES[period.id]} ranks lower because ${reason ? explanation[reason] : "the forecast is less complete"}.`;
 }
 
 function HourlyFitChart({ points, date, selectedHour, windows, onHourChange }: { points: ChartPoint[]; date: string; selectedHour: number; windows: Array<{ start: number; end: number }>; onHourChange: (hour: number) => void }) {
@@ -694,7 +715,7 @@ export function HaveAGreatDayApp() {
   const planningHours = useMemo(() => {
     if (!forecast || !activeDay) return [];
     return forecast.conditions.filter((condition) => {
-      if (!condition.time.startsWith(`${activeDay.date}T`) || condition.time <= localHour) return false;
+      if (!condition.time.startsWith(`${activeDay.date}T`) || condition.time <= localHour || condition.isDay !== true) return false;
       const hour = Number(condition.time.slice(11, 13));
       return hour >= CHART_START_HOUR && hour < CHART_END_HOUR;
     });
@@ -739,12 +760,15 @@ export function HaveAGreatDayApp() {
   const fallbackVoice = useMemo(() => conversationInput ? fallbackConversationVoice(conversationInput) : null, [conversationInput]);
   const personalizedVoice = conversationResult?.key === conversationKey ? conversationResult.voice : null;
   const conversationVoice = personalizedVoice ?? fallbackVoice;
-  const displayedWindows = useMemo(() => conversationVoice?.mode === "windows"
+  const displayedWindows = useMemo(() => conversationVoice && conversationVoice.mode !== "none"
     ? conversationVoice.selectedIds.flatMap((id) => conversationInput?.windows.find((window) => window.id === id) ?? [])
     : [], [conversationInput, conversationVoice]);
-  const displayedPeriods = useMemo(() => conversationVoice?.mode === "windows"
+  const displayedPeriods = useMemo(() => conversationVoice && conversationVoice.mode !== "none"
     ? conversationVoice.selectedIds.flatMap((id) => recommendedPeriods.find((period) => period.id === id) ?? [])
     : [], [conversationVoice, recommendedPeriods]);
+  const excludedWindowNotes = useMemo(() => conversationVoice?.mode === "none" ? [] : activePeriods
+    .filter((period) => !conversationVoice?.selectedIds.includes(period.id) && period.conditions.some((hour) => hour.time > localHour))
+    .map((period) => excludedPeriodNote(period, profile, localHour)), [activePeriods, conversationVoice, localHour, profile]);
   const activeHours = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedHours(period)) : planningHours;
   const activeRatings = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedRatings(period)) : planningHours.map((hour) => rateHour(hour, profile));
   const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
@@ -848,9 +872,9 @@ export function HaveAGreatDayApp() {
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
-          <Link className="brand-lockup" href="/" aria-label="Have a Great Day home"><strong>Have a Great Day</strong><small>Let’s find your best times outside.</small></Link>
+          <Link className="brand-lockup" href="/" aria-label="Have a Great Day home"><strong>Have a Great Day</strong><small>Let’s find a comfortable time outside.</small></Link>
           <div className="card-controls">
-            <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog"><span>{location ? locationLabel(location) : "Choose a place"}</span><kbd>⌘K</kbd></button>
+            <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog" aria-label={location ? `Change location. Current location is ${locationLabel(location)}.` : "Choose a place"}><span>{location ? location.name === "Approximate device location" ? "Your area" : location.name : "Choose a place"}</span><kbd>⌘K</kbd></button>
             <button className="unit-toggle" type="button" onClick={toggleUnits} aria-label={`Temperature is shown in ${units === "metric" ? "Celsius" : "Fahrenheit"}. Switch to ${units === "metric" ? "Fahrenheit" : "Celsius"}.`}>{units === "metric" ? "°C" : "°F"}</button>
           </div>
         </header>
@@ -861,19 +885,20 @@ export function HaveAGreatDayApp() {
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite">
-          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll read the whole week and tell you what&apos;s genuinely worth planning around.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
-          {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Looking across the week.</h1><p>Balancing weather, air quality, UV, temperature, and daylight.</p></div> : null}
+          {status.kind === "idle" ? <><h1 id="decision-title">Not just a weather app.</h1><p>We bring together weather, AQI, UV, comfort, and a little AI to find better times for walks, hikes, rides, kids, and pets.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
+          {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Turning the forecast into a plan.</h1><p>We&apos;re weighing weather, air quality, UV, comfort, and daylight across the week.</p></div> : null}
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
           {status.kind === "ready" && location && forecast && activeDay ? <>
             <h1 id="decision-title" className="visually-hidden">Outdoor times for {dayName(activeDay.date)}</h1>
             {conversationInput && conversationVoice ? <section className="forecast-conversation" aria-label={`A personal plan for ${dayName(activeDay.date)}`} aria-live="off">
-              <p className="forecast-conversation__kicker">A little plan for your day</p>
               <div key={personalizedVoice ? `${conversationKey}:personal` : `${conversationKey}:instant`} className="forecast-conversation__note">
                 <p className="forecast-conversation__opening">{conversationVoice.opening}</p>
-                {conversationVoice.mode === "windows" ? <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{displayedWindows.map((window, index) => {
+                {conversationVoice.mode === "all_day" ? <p className="forecast-conversation__day-summary">{describeConversationDay(conversationInput.assessment.summary)}</p> : null}
+                {conversationVoice.mode !== "none" ? <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{displayedWindows.map((window, index) => {
                   const lead = conversationVoice.leads[index]?.text ?? fallbackVoice?.leads[index]?.text ?? "Another option is";
                   return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span></p>;
-                })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>{conversationVoice.mode === "all_day" ? "Choose the time that fits your plans instead of planning around a narrow forecast window." : "Choose another day above and we’ll look for a better opening."}</p></div>}
+                })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>Choose another day above and we’ll look for a better opening.</p></div>}
+                {excludedWindowNotes.length ? <p className="forecast-conversation__tradeoffs">{excludedWindowNotes.join(" ")}</p> : null}
               </div>
             </section> : <p className="decision-context">No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</p>}
           </> : null}

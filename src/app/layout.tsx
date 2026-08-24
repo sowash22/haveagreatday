@@ -11,10 +11,10 @@ const bodyFont = Geist({
 
 export const metadata: Metadata = {
   title: {
-    default: "Have a Great Day: Find a better time outside",
+    default: "Have a Great Day: Know when to go outside",
     template: "%s | Have a Great Day",
   },
-  description: "Compare the next seven days to plan a walk, run, ride, dog walk, or park visit around weather, air quality, UV, and temperature.",
+  description: "Not just a weather app. Have a Great Day combines weather, AQI, UV, comfort, daylight, and a little AI to find practical times for walks, hikes, rides, and family or pet outings.",
   other: {
     "impeccable-contract": "seed=f9dbe9d4; direction=canon-weather; mode=operate; variance=6; motion=3; density=3; brief=.impeccable/surfaces/src-app-have-a-great-day-app-tsx.md",
   },
