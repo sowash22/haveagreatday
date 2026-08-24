@@ -203,7 +203,8 @@ small, time, dd { font-variant-numeric: tabular-nums; }
 }
 .card-action--quiet { background: rgb(8 15 11 / 36%); color: #fff; backdrop-filter: blur(10px); }
 
-.method-details { position: relative; align-self: end; }
+.card-disclosures { position: relative; align-self: end; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.method-details { position: static; }
 .method-details > summary {
   min-height: 2.75rem;
   width: fit-content;
@@ -244,6 +245,10 @@ small, time, dd { font-variant-numeric: tabular-nums; }
   animation: method-in 280ms var(--ease-out) both;
 }
 .method-details:not([open]) .method-details__body { display: none; }
+.founder-note { align-content: start; gap: 0.85rem; }
+.founder-note h2 { max-width: 18ch; font-size: clamp(1.5rem, 3vw, 2.1rem); }
+.founder-note__story { max-width: 68ch; display: grid; gap: 0.75rem; color: rgb(255 255 255 / 76%); font-size: clamp(0.875rem, 1.2vw, 0.96rem); line-height: 1.5; }
+.founder-note__story p:first-child { color: #fff; font-size: clamp(1rem, 1.5vw, 1.12rem); font-weight: 620; line-height: 1.4; }
 .method-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 1.25rem; }
 .method-heading > div:first-child { display: grid; gap: 0.3rem; }
 .method-heading h2 { font-size: clamp(1.3rem, 2.5vw, 1.8rem); }
@@ -362,6 +367,8 @@ input[type="search"][aria-invalid="true"] { border-color: var(--color-error); ba
   .forecast-conversation__lines { gap: 0.42rem; }
   .forecast-conversation__lines p, .forecast-conversation__day p, .forecast-conversation__day-summary { font-size: 0.875rem; line-height: 1.35; }
   .method-details__body { max-height: 76vh; }
+  .card-disclosures { flex-wrap: nowrap; }
+  .method-details > summary { min-height: 2.65rem; padding-inline: 0.7rem; font-size: 0.78rem; }
   .method-heading { grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
   .fit-score { min-width: 4.5rem; }
   .fit-score strong { font-size: 2.4rem; }

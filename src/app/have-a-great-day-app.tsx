@@ -494,6 +494,7 @@ export function HaveAGreatDayApp() {
   const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const methodDetails = useRef<HTMLDetailsElement | null>(null);
+  const founderDetails = useRef<HTMLDetailsElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
@@ -584,11 +585,13 @@ export function HaveAGreatDayApp() {
 
   useEffect(() => {
     const closeOnOutsidePress = (event: PointerEvent) => {
-      const details = methodDetails.current;
-      if (details?.open && event.target instanceof Node && !details.contains(event.target)) details.open = false;
+      if (!(event.target instanceof Node)) return;
+      for (const details of [methodDetails.current, founderDetails.current]) {
+        if (details?.open && !details.contains(event.target)) details.open = false;
+      }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      const details = methodDetails.current;
+      const details = [methodDetails.current, founderDetails.current].find((item) => item?.open);
       if (event.key !== "Escape" || !details?.open) return;
       details.open = false;
       details.querySelector("summary")?.focus();
@@ -904,26 +907,41 @@ export function HaveAGreatDayApp() {
           </> : null}
         </div>
 
-        <details ref={methodDetails} className="method-details">
-          <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
-          <div className="method-details__body">
-            {status.kind === "ready" && activeDay && activeHours.length ? <>
-              <header className="method-heading"><div><h2>{conversationVoice?.mode === "all_day" ? "Why the whole day works" : conversationVoice?.mode === "none" ? "Why another day is better" : "Why these times work"}</h2><p>{rankingSummary}</p></div>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div> : null}</header>
-              <dl className="method-facts">
-                <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
-                <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
-                <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
-                <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
-              </dl>
-              <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windows={chartWindows} onHourChange={setChartHour}/>
-            </> : <p>We compare seven days of local weather, air quality, UV, and feels-like temperature, then find practical windows throughout each day.</p>}
-            <section className="method-breakdown" aria-labelledby="method-breakdown-title">
-              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{conversationVoice?.mode === "all_day" ? "We checked the full planning day and found that isolated windows would add clutter." : conversationVoice?.mode === "none" ? "We checked the full planning day and did not find a window that cleared the forecast guardrails." : "We compare four parts of the day, then keep only the windows with a worthwhile balance."} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
-              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
-              <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
-            </section>
-          </div>
-        </details>
+        <div className="card-disclosures">
+          <details ref={methodDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && founderDetails.current?.open) founderDetails.current.open = false; }}>
+            <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
+            <div className="method-details__body">
+              {status.kind === "ready" && activeDay && activeHours.length ? <>
+                <header className="method-heading"><div><h2>{conversationVoice?.mode === "all_day" ? "Why the whole day works" : conversationVoice?.mode === "none" ? "Why another day is better" : "Why these times work"}</h2><p>{rankingSummary}</p></div>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div> : null}</header>
+                <dl className="method-facts">
+                  <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
+                  <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
+                  <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
+                  <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
+                </dl>
+                <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windows={chartWindows} onHourChange={setChartHour}/>
+              </> : <p>We compare seven days of local weather, air quality, UV, and feels-like temperature, then find practical windows throughout each day.</p>}
+              <section className="method-breakdown" aria-labelledby="method-breakdown-title">
+                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{conversationVoice?.mode === "all_day" ? "We checked the full planning day and found that isolated windows would add clutter." : conversationVoice?.mode === "none" ? "We checked the full planning day and did not find a window that cleared the forecast guardrails." : "We compare four parts of the day, then keep only the windows with a worthwhile balance."} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
+                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
+                <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
+              </section>
+            </div>
+          </details>
+
+          <details ref={founderDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && methodDetails.current?.open) methodDetails.current.open = false; }}>
+            <summary>Why I built this</summary>
+            <div className="method-details__body founder-note">
+              <h2>Why I built this</h2>
+              <div className="founder-note__story">
+                <p>Most weather apps give us plenty of hourly data, but still leave us to answer the real question: when is the right time to go outside?</p>
+                <p>I felt this every time I planned a park visit for my daughter. My mom would ask when to take her, and I would open the forecast, compare the temperature, sun, air quality, and conditions, then turn all those numbers into one recommendation.</p>
+                <p>Have a Great Day does that work for you. It brings weather, AQI, UV, comfort, and daylight together, then suggests practical times for a walk, park visit, hike, ride, or time outside with the people and pets you care about.</p>
+                <p>I do not want this to become another weather app full of features and data. The principle is simple: fewer numbers, more personal and useful guidance. I hope it helps you have a great day.</p>
+              </div>
+            </div>
+          </details>
+        </div>
       </section>
     </main>
 
