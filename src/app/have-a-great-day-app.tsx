@@ -5,7 +5,7 @@ import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
-import { PROFILE_WEIGHTS, rateHour, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type TimePreference, type Units } from "../suitability";
+import { PROFILE_WEIGHTS, rateHour, recommend, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
 const PROFILE_KEY = "haveagreatday-profile";
@@ -86,6 +86,18 @@ type ChartPoint = {
   hour: number;
   fits: Partial<Record<ComponentName, number>>;
 };
+
+type WindowPlan = { conditions: HourConditions[]; recommendation: Recommendation };
+type PeriodId = "morning" | "noon" | "evening" | "night";
+type PeriodPlan = WindowPlan & { id: PeriodId; label: string; score: number | null };
+
+const OUTING_PERIODS: Array<{ id: PeriodId; label: string; start: number; end: number }> = [
+  { id: "morning", label: "Morning", start: 6, end: 11 },
+  { id: "noon", label: "Noon", start: 11, end: 15 },
+  { id: "evening", label: "Evening", start: 15, end: 20 },
+  { id: "night", label: "Night", start: 20, end: 22 },
+];
+const PERIOD_TIE_PRIORITY: PeriodId[] = ["morning", "evening", "night", "noon"];
 
 const CHART_METRICS: Array<{ name: ComponentName; color: string; dash?: string }> = [
   { name: "weather", color: "#8ed8ff" },
@@ -228,29 +240,69 @@ function formatValue(value: number | null, suffix = ""): string {
   return value === null ? "Unavailable" : `${Math.round(value)}${suffix}`;
 }
 
-function selectedRatings(day: DayPlan | undefined): HourRating[] {
+function selectedRatings(day: WindowPlan | undefined): HourRating[] {
   return day?.recommendation.hours.flatMap((index) => day.recommendation.ratings[index] ? [day.recommendation.ratings[index]] : []) ?? [];
 }
 
-function selectedHours(day: DayPlan | undefined): HourConditions[] {
+function selectedHours(day: WindowPlan | undefined): HourConditions[] {
   return day?.recommendation.hours.flatMap((index) => day.conditions[index] ? [day.conditions[index]] : []) ?? [];
 }
 
-function windowLabel(day: DayPlan | undefined): string {
+function windowLabel(day: WindowPlan | undefined): string {
   const hours = selectedHours(day);
   const start = hours[0]?.time;
   const end = hours.at(-1)?.time;
-  if (!start || !end) return "No daylight window available";
+  if (!start || !end) return "No window available";
   return `${formatTime(start, { hour: "numeric" })} to ${formatTime(nextHour(end), { hour: "numeric" }).replace(/\s/g, " ")}`;
 }
 
-function compactWindowLabel(day: DayPlan): string {
+function compactWindowLabel(day: WindowPlan): string {
   const hours = selectedHours(day);
   const start = hours[0]?.time;
   const end = hours.at(-1)?.time;
   if (!start || !end) return "None";
   const compactTime = (time: string) => formatTime(time, { hour: "numeric" }).replace(/\s/g, "").replace("AM", "a").replace("PM", "p");
   return `${compactTime(start)}-${compactTime(nextHour(end))}`;
+}
+
+function lightLabel(day: WindowPlan): string {
+  const hours = selectedHours(day);
+  if (!hours.length) return "No window";
+  if (hours.every((hour) => hour.isDay === true)) return "Daylight";
+  if (hours.every((hour) => hour.isDay === false)) return "After dark";
+  const first = hours[0]?.isDay;
+  const last = hours.at(-1)?.isDay;
+  if (first === false && last === true) return "Around sunrise";
+  if (first === true && last === false) return "Around sunset";
+  return "Changing light";
+}
+
+function weatherConditionLabel(codes: Array<number | null>): string {
+  const present = codes.filter((code): code is number => code !== null);
+  if (!present.length) return "Weather unavailable";
+  if (present.some((code) => [95, 96, 99].includes(code))) return "Thunderstorms";
+  if (present.some((code) => [71, 73, 75, 77, 85, 86].includes(code))) return "Snow";
+  if (present.some((code) => [61, 63, 65, 66, 67, 80, 81, 82].includes(code))) return "Rain";
+  if (present.some((code) => [51, 53, 55, 56, 57].includes(code))) return "Drizzle";
+  if (present.some((code) => [45, 48].includes(code))) return "Fog";
+  if (present.some((code) => code === 3)) return "Overcast";
+  if (present.some((code) => [1, 2].includes(code))) return "Partly cloudy";
+  if (present.every((code) => code === 0)) return "Clear";
+  return "Mixed weather";
+}
+
+function periodPlans(conditions: HourConditions[], date: string, profile: Profile, currentLocalHour: string): PeriodPlan[] {
+  return OUTING_PERIODS.map((period) => {
+    const periodConditions = conditions.filter((condition) => {
+      if (!condition.time.startsWith(`${date}T`)) return false;
+      const hour = Number(condition.time.slice(11, 13));
+      return hour >= period.start && hour < period.end;
+    });
+    const recommendation = recommend(periodConditions, profile, currentLocalHour, { daylightOnly: false });
+    const ratings = recommendation.hours.flatMap((index) => recommendation.ratings[index] ? [recommendation.ratings[index]] : []);
+    const score = ratings.length ? Math.round(ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length) : null;
+    return { id: period.id, label: period.label, conditions: periodConditions, recommendation, score };
+  });
 }
 
 function average(values: Array<number | null>): number | null {
@@ -261,6 +313,19 @@ function average(values: Array<number | null>): number | null {
 function maxValue(values: Array<number | null>): number | null {
   const present = values.filter((value): value is number => value !== null);
   return present.length ? Math.max(...present) : null;
+}
+
+function periodEvidence(day: WindowPlan, units: Units): { condition: string; temperature: string; aqi: string; uv: string } {
+  const hours = selectedHours(day);
+  const temperature = average(hours.map((hour) => hour.apparentTemperatureC));
+  const aqi = average(hours.map((hour) => hour.usAqi));
+  const uv = maxValue(hours.map((hour) => hour.uvIndex));
+  return {
+    condition: weatherConditionLabel(hours.map((hour) => hour.weatherCode)),
+    temperature: temperature === null ? "No temp" : formatTemperature(temperature, units).replace(" ", "\u00a0"),
+    aqi: aqi === null ? "AQI unavailable" : `AQI ${Math.round(aqi)}`,
+    uv: uv === null ? "UV unavailable" : `UV ${uv.toFixed(1)}`,
+  };
 }
 
 function componentAverage(ratings: HourRating[], component: ComponentName): number | null {
@@ -279,22 +344,24 @@ function reasonSummary(ratings: HourRating[]): string | null {
   return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
 }
 
-function HourlyFitChart({ points, date, selectedHour, windowStart, windowEnd, onHourChange }: { points: ChartPoint[]; date: string; selectedHour: number; windowStart: number | null; windowEnd: number | null; onHourChange: (hour: number) => void }) {
+function HourlyFitChart({ points, date, selectedHour, windows, onHourChange }: { points: ChartPoint[]; date: string; selectedHour: number; windows: Array<{ start: number; end: number }>; onHourChange: (hour: number) => void }) {
   const selectedPoint = points.find((point) => point.hour === selectedHour);
   const selectedTime = formatTime(`${date}T${String(selectedHour).padStart(2, "0")}:00`, { hour: "numeric" });
   const selectedSummary = CHART_METRICS.map((metric) => `${METRIC_LABELS[metric.name]} ${selectedPoint?.fits[metric.name] === undefined ? "unavailable" : Math.round(selectedPoint.fits[metric.name] ?? 0)}`).join(", ");
   const selectedX = chartX(selectedHour);
-  const highlightStart = windowStart === null ? null : Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, windowStart));
-  const highlightEnd = windowEnd === null ? null : Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, windowEnd));
+  const highlightWindows = windows.map((window) => ({
+    start: Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, window.start)),
+    end: Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, window.end)),
+  })).filter((window) => window.end > window.start);
 
   return <figure className="hourly-chart" aria-labelledby="hourly-chart-title">
-    <figcaption><span><strong id="hourly-chart-title">Through the day</strong><small>Higher is friendlier. The shaded area is your window; drag to explore.</small></span><strong>{selectedTime}</strong></figcaption>
+    <figcaption><span><strong id="hourly-chart-title">Through the day</strong><small>Higher is friendlier. Shaded areas are {windows.length === 3 ? "the three best" : "the best available"} windows; drag to explore.</small></span><strong>{selectedTime}</strong></figcaption>
     <div className="hourly-chart__plot">
       <svg viewBox={`0 0 ${CHART_WIDTH} 100`} preserveAspectRatio="none" aria-hidden="true">
         <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={CHART_TOP} y2={CHART_TOP}/>
         <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={(CHART_TOP + CHART_BOTTOM) / 2} y2={(CHART_TOP + CHART_BOTTOM) / 2}/>
         <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={CHART_BOTTOM} y2={CHART_BOTTOM}/>
-        {highlightStart !== null && highlightEnd !== null && highlightEnd > highlightStart ? <rect className="hourly-chart__window" x={chartX(highlightStart)} y="0" width={chartX(highlightEnd) - chartX(highlightStart)} height="100" rx="8"/> : null}
+        {highlightWindows.map((window) => <rect key={`${window.start}-${window.end}`} className="hourly-chart__window" x={chartX(window.start)} y="0" width={chartX(window.end) - chartX(window.start)} height="100" rx="8"/>)}
         {CHART_METRICS.map((metric) => <path key={metric.name} className="hourly-chart__line" d={metricPath(points, metric.name)} stroke={metric.color} strokeDasharray={metric.dash}/>)}
         <line className="hourly-chart__cursor" x1={selectedX} x2={selectedX} y1="0" y2="100"/>
       </svg>
@@ -435,6 +502,7 @@ export function HaveAGreatDayApp() {
     url.searchParams.set("time", timePreference);
     url.searchParams.set("units", units);
     if (selectedDate) url.searchParams.set("date", selectedDate); else url.searchParams.delete("date");
+    url.searchParams.delete("period");
     if (location) {
       url.searchParams.set("lat", location.latitude.toFixed(2));
       url.searchParams.set("lon", location.longitude.toFixed(2));
@@ -508,6 +576,12 @@ export function HaveAGreatDayApp() {
     });
   }
 
+  function toggleUnits() {
+    const nextUnits: Units = units === "metric" ? "imperial" : "metric";
+    setUnits(nextUnits);
+    savePreference(UNITS_KEY, nextUnits);
+  }
+
   function forgetLocation() {
     if (!location) return;
     const next = savedLocations.filter((item) => item.latitude !== location.latitude || item.longitude !== location.longitude);
@@ -524,9 +598,14 @@ export function HaveAGreatDayApp() {
   const rankedDays = useMemo(() => dayPlans.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100)), [dayPlans]);
   const topDay = rankedDays[0];
   const activeDay = dayPlans.find((day) => day.date === selectedDate) ?? topDay ?? dayPlans[0];
-  const activeIsTop = Boolean(activeDay && topDay && activeDay.date === topDay.date);
-  const activeRatings = selectedRatings(activeDay);
-  const activeHours = selectedHours(activeDay);
+  const activePeriods = useMemo(() => forecast && activeDay ? periodPlans(forecast.conditions, activeDay.date, profile, localHour) : [], [activeDay, forecast, localHour, profile]);
+  const recommendedPeriods = useMemo(() => activePeriods
+    .filter((period) => period.score !== null)
+    .toSorted((first, second) => (first.score ?? 100) - (second.score ?? 100) || PERIOD_TIE_PRIORITY.indexOf(first.id) - PERIOD_TIE_PRIORITY.indexOf(second.id))
+    .slice(0, 3)
+    .toSorted((first, second) => OUTING_PERIODS.findIndex((period) => period.id === first.id) - OUTING_PERIODS.findIndex((period) => period.id === second.id)), [activePeriods]);
+  const activeRatings = recommendedPeriods.flatMap((period) => selectedRatings(period));
+  const activeHours = recommendedPeriods.flatMap((period) => selectedHours(period));
   const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
   const meanAqi = average(activeHours.map((hour) => hour.usAqi));
   const maxUv = maxValue(activeHours.map((hour) => hour.uvIndex));
@@ -540,22 +619,26 @@ export function HaveAGreatDayApp() {
   const currentDate = localHour.slice(0, 10);
   const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
   const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
-  const representativeWeather = activeHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
+  const sceneHours = selectedHours(activeDay);
+  const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
   const scenePool = SCENE_POOLS[sceneKey];
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
   const scene = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
-  const greatTimeFit = activeDay?.score === null || activeDay?.score === undefined ? null : Math.max(0, 100 - activeDay.score);
-  const activeRank = activeDay ? rankedDays.findIndex((day) => day.date === activeDay.date) + 1 : 0;
-  const rankingSummary = activeIsTop
-    ? "Best balance across the next seven days."
-    : activeDay
-      ? `Best window on ${dayName(activeDay.date)}${activeRank > 0 ? `. ${activeRank} of ${rankedDays.length} this week.` : "."}`
-      : "We compare each available daylight window.";
+  const recommendationScore = average(recommendedPeriods.map((period) => period.score));
+  const greatTimeFit = recommendationScore === null ? null : Math.max(0, Math.round(100 - recommendationScore));
+  const rankingSummary = activeDay && recommendedPeriods.length
+    ? `${recommendedPeriods.length === 3 ? "The three strongest" : "The best available"} windows we found for ${dayName(activeDay.date)}.`
+    : "We compare each available window.";
   const profileWeights = Object.entries(PROFILE_WEIGHTS[profile])
     .toSorted(([, first], [, second]) => second - first) as Array<[ComponentName, number]>;
-  const activeWindowStart = activeHours[0] ? Number(activeHours[0].time.slice(11, 13)) : null;
-  const activeWindowEnd = activeHours.at(-1) ? Number(activeHours.at(-1)?.time.slice(11, 13)) + 1 : null;
+  const chartWindows = recommendedPeriods.flatMap((period) => {
+    const hours = selectedHours(period);
+    const start = hours[0] ? Number(hours[0].time.slice(11, 13)) : null;
+    const end = hours.at(-1) ? Number(hours.at(-1)?.time.slice(11, 13)) + 1 : null;
+    return start === null || end === null ? [] : [{ start, end }];
+  });
+  const firstWindowStart = chartWindows[0]?.start ?? 12;
   const chartPoints = useMemo<ChartPoint[]>(() => {
     if (!forecast || !activeDay) return [];
     return forecast.conditions.flatMap((condition) => {
@@ -570,8 +653,8 @@ export function HaveAGreatDayApp() {
   }, [activeDay, forecast, profile]);
 
   useEffect(() => {
-    setChartHour(Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, activeWindowStart ?? 12)));
-  }, [activeDay?.date, activeWindowStart]);
+    setChartHour(Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, firstWindowStart)));
+  }, [activeDay?.date, firstWindowStart]);
 
   useEffect(() => {
     const nextScene = scenePool[(sceneIndex + 1) % scenePool.length];
@@ -593,39 +676,51 @@ export function HaveAGreatDayApp() {
 
         <header className="card-bar">
           <Link className="wordmark wordmark--card" href="/" aria-label="Have a Great Day home">Have a Great Day</Link>
-          <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog"><span>{location ? locationLabel(location) : "Choose a place"}</span><kbd>⌘K</kbd></button>
+          <div className="card-controls">
+            <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog"><span>{location ? locationLabel(location) : "Choose a place"}</span><kbd>⌘K</kbd></button>
+            <button className="unit-toggle" type="button" onClick={toggleUnits} aria-label={`Temperature is shown in ${units === "metric" ? "Celsius" : "Fahrenheit"}. Switch to ${units === "metric" ? "Fahrenheit" : "Celsius"}.`}>{units === "metric" ? "°C" : "°F"}</button>
+          </div>
         </header>
 
-        {status.kind === "ready" && activeDay ? <div className="week-overview"><p>Best times this week</p><div className="week-times" role="group" aria-label="Best outdoor times for the next seven days">{dayPlans.map((day) => {
-          const selectable = selectedHours(day).length > 0;
-          return <button type="button" key={day.date} disabled={!selectable} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={`${dayName(day.date)}, ${windowLabel(day)}`} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" }).slice(0, 2)}</span><strong>{compactWindowLabel(day)}</strong></button>;
+        {status.kind === "ready" && activeDay ? <div className="week-overview"><p>The week ahead</p><div className="week-times" role="group" aria-label="Choose a day in the next week">{dayPlans.map((day) => {
+          const selectable = day.conditions.length > 0;
+          return <button type="button" key={day.date} disabled={!selectable} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={dayName(day.date)} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" })}</span></button>;
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite">
-          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll compare the week and give you one clear window.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
+          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll compare the week and find three strong options across the day.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
           {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Looking across the week.</h1><p>Balancing weather, air quality, UV, temperature, and daylight.</p></div> : null}
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
           {status.kind === "ready" && location && forecast && activeDay ? <>
-            <h1 id="decision-title">{dayName(activeDay.date)},<br/>{windowLabel(activeDay)}</h1>
-            <p className="decision-context">{activeIsTop ? `${location.name} looks good for some time outside. This window has the week's best balance of weather, air quality, UV, comfort, and daylight.` : `${location.name} looks best at this time for the day you chose, balancing weather, air quality, UV, comfort, and daylight.`}</p>
+            <h1 id="decision-title" className="visually-hidden">Outdoor times for {dayName(activeDay.date)}</h1>
+            <p className="decision-context">{recommendedPeriods.length ? <>{location.name} looks good for some time outside. {recommendedPeriods.length === 3 ? "These are the three strongest windows" : "These are the best windows still available"} after balancing weather, air quality, UV, and comfort.</> : <>No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</>}</p>
+            {recommendedPeriods.length ? <div className="day-windows" data-count={recommendedPeriods.length} role="list" aria-label={`Best times for ${dayName(activeDay.date)}`}>{recommendedPeriods.map((period) => {
+              const evidence = periodEvidence(period, units);
+              return <div role="listitem" key={period.id}>
+                <span>{period.label}</span>
+                <strong>{compactWindowLabel(period)}</strong>
+                <small className="window-condition">{evidence.condition} · {lightLabel(period)}</small>
+                <small className="window-metrics">{evidence.temperature} · {evidence.aqi} · {evidence.uv}</small>
+              </div>;
+            })}</div> : null}
           </> : null}
         </div>
 
         <details ref={methodDetails} className="method-details">
-          <summary>{status.kind === "ready" ? "Why this time?" : "How it works"}</summary>
+          <summary>{status.kind === "ready" ? "Why these times?" : "How it works"}</summary>
           <div className="method-details__body">
             {status.kind === "ready" && activeDay && activeHours.length ? <>
-              <header className="method-heading"><div><h2>Why this time works</h2><p>{rankingSummary}</p></div><div className="fit-score"><strong>{greatTimeFit}</strong><span>Great-time fit</span></div></header>
+              <header className="method-heading"><div><h2>Why these times work</h2><p>{rankingSummary}</p></div><div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div></header>
               <dl className="method-facts">
                 <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
                 <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
                 <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
                 <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
               </dl>
-              <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windowStart={activeWindowStart} windowEnd={activeWindowEnd} onHourChange={setChartHour}/>
-            </> : <p>We compare seven days of local weather, air quality, UV, feels-like temperature, and daylight, then pick the lowest-tradeoff outdoor window.</p>}
+              <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windows={chartWindows} onHourChange={setChartHour}/>
+            </> : <p>We compare seven days of local weather, air quality, UV, and feels-like temperature, then find practical windows throughout each day.</p>}
             <section className="method-breakdown" aria-labelledby="method-breakdown-title">
-              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>We compare daylight hours and choose the lowest total tradeoff. {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
+              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>We compare four parts of the day, then keep the three with the lowest total tradeoff. {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
               {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
               <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
             </section>

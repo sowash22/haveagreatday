@@ -11,9 +11,9 @@ description: A cinematic, one-answer outdoor planner.
 
 ## Hierarchy
 
-The whole planner fits in one normal viewport. The card contains, in order: brand and place search, a compact seven-day best-times ribbon, one recommended day and time, one short explanation, and a collapsed method disclosure. There is no app bar, page footer, activity control, alternatives section, or preferences form on the primary surface. One compact hourly-fit chart belongs inside the disclosure, never on the main decision surface.
+The whole planner fits in one normal viewport. The card contains, in order: brand, place search with an adjacent temperature-unit toggle, a compact seven-day ribbon with day names only, one selected day, the three strongest schedule-friendly windows, one short explanation, and a collapsed method disclosure. Each window keeps its time dominant, followed by two quiet evidence lines for weather and light, then temperature, AQI, and UV. The app evaluates Morning, Noon, Evening, and Night, then keeps three; Morning, Evening, and Night win ties so Noon appears only when its forecast fit is better. There is no app bar, page footer, activity control, alternatives section, or preferences form on the primary surface. One compact hourly-fit chart belongs inside the disclosure, never on the main decision surface.
 
-Location search opens a focused dialog. Recent places appear first, followed by search and approximate device location. The week ribbon keeps all seven windows comparable and lets one tap replace the main answer.
+Location search opens a focused dialog. Recent places appear first, followed by search and approximate device location. The week ribbon keeps all seven days comparable and lets one tap replace the main answer. Recommended windows are read-only results, not controls. After-dark windows are labeled plainly, and the evidence panel explains all displayed windows together.
 
 ## Visual language
 

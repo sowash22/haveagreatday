@@ -129,12 +129,13 @@ export function rateHour(hour: HourConditions, profile: Profile): HourRating {
   return { time: hour.time, score, label, incomplete: missing.length > 0, reasons, missing, components };
 }
 
-export function recommend(conditions: HourConditions[], profile: Profile, currentLocalHour: string): Recommendation {
+export function recommend(conditions: HourConditions[], profile: Profile, currentLocalHour: string, options: { daylightOnly?: boolean } = {}): Recommendation {
+  const daylightOnly = options.daylightOnly ?? true;
   const ratings = conditions.map((hour) => rateHour(hour, profile));
   const eligible = (index: number) => {
     const hour = conditions[index];
     const rating = ratings[index];
-    return Boolean(hour && rating && hour.time > currentLocalHour && hour.isDay === true && rating.components.weather !== undefined);
+    return Boolean(hour && rating && hour.time > currentLocalHour && (!daylightOnly || hour.isDay === true) && rating.components.weather !== undefined);
   };
   let best: { hours: number[]; mean: number } | null = null;
 
@@ -149,16 +150,16 @@ export function recommend(conditions: HourConditions[], profile: Profile, curren
 
   if (best) return { ratings, hours: best.hours, limited: false, limitation: null };
 
-  const daylight = ratings
+  const eligibleRatings = ratings
     .map((rating, index) => ({ rating, index }))
     .filter(({ index }) => eligible(index))
     .sort((a, b) => a.rating.score - b.rating.score || a.index - b.index);
-  if (daylight[0]) {
+  if (eligibleRatings[0]) {
     return {
       ratings,
-      hours: [daylight[0].index],
+      hours: [eligibleRatings[0].index],
       limited: true,
-      limitation: "No two consecutive daylight hours were available, so this is the best single daylight hour.",
+      limitation: `No two consecutive ${daylightOnly ? "daylight " : ""}hours were available, so this is the best single hour.`,
     };
   }
 
@@ -166,7 +167,7 @@ export function recommend(conditions: HourConditions[], profile: Profile, curren
     ratings,
     hours: [],
     limited: true,
-    limitation: "No future daylight hour with complete weather data was available in this forecast.",
+    limitation: `No future ${daylightOnly ? "daylight " : ""}hour with complete weather data was available in this forecast.`,
   };
 }
 

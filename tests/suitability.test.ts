@@ -86,6 +86,15 @@ describe("recommendation windows", () => {
     expect(result.limited).toBe(true);
   });
 
+  it("can recommend an after-dark window when explicitly requested", () => {
+    const hours = [
+      completeHour("2026-08-23T20:00", { isDay: false }),
+      completeHour("2026-08-23T21:00", { isDay: false }),
+    ];
+    expect(recommend(hours, "general", "2026-08-23T19:00").hours).toEqual([]);
+    expect(recommend(hours, "general", "2026-08-23T19:00", { daylightOnly: false }).hours).toEqual([0, 1]);
+  });
+
   it("builds separate day plans and respects the preferred time of day", () => {
     const hours = [
       completeHour("2026-08-23T09:00", { precipitationProbability: 80 }),
