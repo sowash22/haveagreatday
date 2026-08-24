@@ -3,7 +3,8 @@
 import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationInput, type ConversationVoice } from "../conversation";
+import { assessAdaptiveDay } from "../adaptive-plan";
+import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { PROFILE_WEIGHTS, rateHour, recommend, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
@@ -365,6 +366,38 @@ function periodEvidence(day: WindowPlan, units: Units): { condition: string; tem
   };
 }
 
+function temperatureRange(values: Array<number | null>, units: Units): string {
+  const present = values.filter((value): value is number => value !== null);
+  if (!present.length) return "Feels-like temperature unavailable";
+  const converted = present.map((value) => units === "metric" ? value : value * 9 / 5 + 32);
+  const low = Math.round(Math.min(...converted));
+  const high = Math.round(Math.max(...converted));
+  const suffix = units === "metric" ? "°C" : "°F";
+  return low === high ? `Feels like about ${low} ${suffix}` : `Feels like ${low} to ${high} ${suffix}`;
+}
+
+function daylightSummary(hours: HourConditions[]): string {
+  const daylight = hours.filter((hour) => hour.isDay === true);
+  const start = daylight[0]?.time;
+  const end = daylight.at(-1)?.time;
+  if (!start || !end) return "No daylight in the hours checked";
+  return `Daylight from ${formatTime(start, { hour: "numeric" })} to ${formatTime(nextHour(end), { hour: "numeric" })}`;
+}
+
+function conversationDaySummary(hours: HourConditions[], units: Units): ConversationDaySummary {
+  const rain = maxValue(hours.map((hour) => hour.precipitationProbability));
+  const aqi = maxValue(hours.map((hour) => hour.usAqi));
+  const uv = maxValue(hours.map((hour) => hour.uvIndex));
+  return {
+    condition: weatherConditionLabel(hours.map((hour) => hour.weatherCode)),
+    temperature: temperatureRange(hours.map((hour) => hour.apparentTemperatureC), units),
+    rain: rain === null ? "Rain chance unavailable" : `Rain up to ${Math.round(rain)}%`,
+    aqi: aqi === null ? "Air quality unavailable" : `Air peaks at AQI ${Math.round(aqi)}`,
+    uv: uv === null ? "UV unavailable" : `UV peaks at ${uv.toFixed(1)}`,
+    light: daylightSummary(hours),
+  };
+}
+
 function componentAverage(ratings: HourRating[], component: ComponentName): number | null {
   return average(ratings.map((rating) => rating.components[component] ?? null));
 }
@@ -392,7 +425,7 @@ function HourlyFitChart({ points, date, selectedHour, windows, onHourChange }: {
   })).filter((window) => window.end > window.start);
 
   return <figure className="hourly-chart" aria-labelledby="hourly-chart-title">
-    <figcaption><span><strong id="hourly-chart-title">Through the day</strong><small>Higher is friendlier. Shaded areas are {windows.length === 3 ? "the three best" : "the best available"} windows; drag to explore.</small></span><strong>{selectedTime}</strong></figcaption>
+    <figcaption><span><strong id="hourly-chart-title">Through the day</strong><small>{windows.length ? `Higher is friendlier. Shaded areas are ${windows.length === 3 ? "the three selected" : "the selected"} ${windows.length === 1 ? "window" : "windows"}; drag to explore.` : "Higher is friendlier; drag to explore the whole day."}</small></span><strong>{selectedTime}</strong></figcaption>
     <div className="hourly-chart__plot">
       <svg viewBox={`0 0 ${CHART_WIDTH} 100`} preserveAspectRatio="none" aria-hidden="true">
         <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={CHART_TOP} y2={CHART_TOP}/>
@@ -655,12 +688,65 @@ export function HaveAGreatDayApp() {
   const topDay = rankedDays[0];
   const activeDay = dayPlans.find((day) => day.date === selectedDate) ?? topDay ?? dayPlans[0];
   const activePeriods = useMemo(() => forecast && activeDay ? periodPlans(forecast.conditions, activeDay.date, profile, localHour) : [], [activeDay, forecast, localHour, profile]);
-  const recommendedPeriods = useMemo(() => activePeriods
+  const rankedPeriods = useMemo(() => activePeriods
     .filter((period) => period.score !== null)
-    .toSorted((first, second) => (first.score ?? 100) - (second.score ?? 100) || PERIOD_TIE_PRIORITY.indexOf(first.id) - PERIOD_TIE_PRIORITY.indexOf(second.id))
-    .slice(0, 3), [activePeriods]);
-  const activeRatings = recommendedPeriods.flatMap((period) => selectedRatings(period));
-  const activeHours = recommendedPeriods.flatMap((period) => selectedHours(period));
+    .toSorted((first, second) => (first.score ?? 100) - (second.score ?? 100) || PERIOD_TIE_PRIORITY.indexOf(first.id) - PERIOD_TIE_PRIORITY.indexOf(second.id)), [activePeriods]);
+  const planningHours = useMemo(() => {
+    if (!forecast || !activeDay) return [];
+    return forecast.conditions.filter((condition) => {
+      if (!condition.time.startsWith(`${activeDay.date}T`) || condition.time <= localHour) return false;
+      const hour = Number(condition.time.slice(11, 13));
+      return hour >= CHART_START_HOUR && hour < CHART_END_HOUR;
+    });
+  }, [activeDay, forecast, localHour]);
+  const adaptiveDecision = useMemo(() => assessAdaptiveDay(planningHours, rankedPeriods.map((period) => ({ id: period.id, score: period.score, hours: selectedHours(period) })), profile), [planningHours, profile, rankedPeriods]);
+  const recommendedPeriods = useMemo(() => adaptiveDecision.candidateIds.flatMap((id) => rankedPeriods.find((period) => period.id === id) ?? []), [adaptiveDecision.candidateIds, rankedPeriods]);
+  const currentDate = localHour.slice(0, 10);
+  const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
+  const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
+  const activeDayLabel = activeDay ? dayName(activeDay.date) : "";
+  const daySummary = useMemo(() => conversationDaySummary(planningHours, units), [planningHours, units]);
+  const conversationInput = useMemo<ConversationInput | null>(() => {
+    if (!activeDay || !activeDayLabel || !location) return null;
+    return {
+      place: location.name === "Approximate device location" ? "Your area" : location.name,
+      day: activeDayLabel,
+      date: activeDay.date,
+      assessment: {
+        allowedModes: adaptiveDecision.allowedModes,
+        defaultMode: adaptiveDecision.defaultMode,
+        defaultWindowCount: adaptiveDecision.defaultWindowCount,
+        favorableHourShare: adaptiveDecision.favorableHourShare,
+        blockedHourShare: adaptiveDecision.blockedHourShare,
+        summary: daySummary,
+      },
+      windows: recommendedPeriods.map((period) => {
+        const evidence = periodEvidence(period, units);
+        return {
+          id: period.id,
+          time: windowLabel(period),
+          fit: Math.max(0, 100 - (period.score ?? 100)),
+          condition: evidence.condition,
+          temperature: evidence.temperature,
+          aqi: evidence.aqi,
+          uv: evidence.uv,
+          light: lightLabel(period),
+        };
+      }),
+    };
+  }, [activeDay, activeDayLabel, adaptiveDecision, daySummary, location, recommendedPeriods, units]);
+  const conversationKey = useMemo(() => conversationInput ? JSON.stringify(conversationInput) : "", [conversationInput]);
+  const fallbackVoice = useMemo(() => conversationInput ? fallbackConversationVoice(conversationInput) : null, [conversationInput]);
+  const personalizedVoice = conversationResult?.key === conversationKey ? conversationResult.voice : null;
+  const conversationVoice = personalizedVoice ?? fallbackVoice;
+  const displayedWindows = useMemo(() => conversationVoice?.mode === "windows"
+    ? conversationVoice.selectedIds.flatMap((id) => conversationInput?.windows.find((window) => window.id === id) ?? [])
+    : [], [conversationInput, conversationVoice]);
+  const displayedPeriods = useMemo(() => conversationVoice?.mode === "windows"
+    ? conversationVoice.selectedIds.flatMap((id) => recommendedPeriods.find((period) => period.id === id) ?? [])
+    : [], [conversationVoice, recommendedPeriods]);
+  const activeHours = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedHours(period)) : planningHours;
+  const activeRatings = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedRatings(period)) : planningHours.map((hour) => rateHour(hour, profile));
   const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
   const meanAqi = average(activeHours.map((hour) => hour.usAqi));
   const maxUv = maxValue(activeHours.map((hour) => hour.uvIndex));
@@ -671,34 +757,6 @@ export function HaveAGreatDayApp() {
     air: componentAverage(activeRatings, "air"),
     uv: componentAverage(activeRatings, "uv"),
   };
-  const currentDate = localHour.slice(0, 10);
-  const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
-  const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
-  const activeDayLabel = activeDay ? dayName(activeDay.date) : "";
-  const conversationInput = useMemo<ConversationInput | null>(() => {
-    if (!activeDay || !activeDayLabel || !location || !recommendedPeriods.length) return null;
-    return {
-      place: location.name === "Approximate device location" ? "Your area" : location.name,
-      day: activeDayLabel,
-      date: activeDay.date,
-      windows: recommendedPeriods.map((period) => {
-        const evidence = periodEvidence(period, units);
-        return {
-          id: period.id,
-          time: windowLabel(period),
-          condition: evidence.condition,
-          temperature: evidence.temperature,
-          aqi: evidence.aqi,
-          uv: evidence.uv,
-          light: lightLabel(period),
-        };
-      }),
-    };
-  }, [activeDay, activeDayLabel, location, recommendedPeriods, units]);
-  const conversationKey = useMemo(() => conversationInput ? JSON.stringify(conversationInput) : "", [conversationInput]);
-  const fallbackVoice = useMemo(() => conversationInput ? fallbackConversationVoice(conversationInput) : null, [conversationInput]);
-  const personalizedVoice = conversationResult?.key === conversationKey ? conversationResult.voice : null;
-  const conversationVoice = personalizedVoice ?? fallbackVoice;
   const sceneHours = selectedHours(activeDay);
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
@@ -706,20 +764,25 @@ export function HaveAGreatDayApp() {
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
   const sceneCandidate = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
   const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
-  const recommendationScore = average(recommendedPeriods.map((period) => period.score));
+  const recommendationScore = conversationVoice?.mode === "none" ? null : average(activeRatings.map((rating) => rating.score));
   const greatTimeFit = recommendationScore === null ? null : Math.max(0, Math.round(100 - recommendationScore));
-  const rankingSummary = activeDay && recommendedPeriods.length
-    ? `${recommendedPeriods.length === 3 ? "The three strongest" : "The best available"} windows we found for ${dayName(activeDay.date)}.`
-    : "We compare each available window.";
+  const rankingSummary = conversationVoice?.mode === "all_day"
+    ? `Conditions stay consistently favorable across the hours we checked for ${activeDayLabel}.`
+    : conversationVoice?.mode === "none"
+      ? `The forecast does not leave a practical outdoor window in the hours we checked for ${activeDayLabel}.`
+      : displayedPeriods.length
+        ? `${displayedPeriods.length === 1 ? "The strongest window" : `The ${displayedPeriods.length} worthwhile windows`} we found for ${activeDayLabel}.`
+        : "We compare each available window.";
   const profileWeights = Object.entries(PROFILE_WEIGHTS[profile])
     .toSorted(([, first], [, second]) => second - first) as Array<[ComponentName, number]>;
-  const chartWindows = recommendedPeriods.flatMap((period) => {
+  const chartWindows = displayedPeriods.flatMap((period) => {
     const hours = selectedHours(period);
     const start = hours[0] ? Number(hours[0].time.slice(11, 13)) : null;
     const end = hours.at(-1) ? Number(hours.at(-1)?.time.slice(11, 13)) + 1 : null;
     return start === null || end === null ? [] : [{ start, end }];
   });
-  const firstWindowStart = chartWindows[0]?.start ?? 12;
+  const firstPlanningHour = planningHours[0] ? Number(planningHours[0].time.slice(11, 13)) : 12;
+  const firstWindowStart = chartWindows[0]?.start ?? firstPlanningHour;
   const chartPoints = useMemo<ChartPoint[]>(() => {
     if (!forecast || !activeDay) return [];
     return forecast.conditions.flatMap((condition) => {
@@ -798,7 +861,7 @@ export function HaveAGreatDayApp() {
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite">
-          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll compare the week and find three strong options across the day.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
+          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll read the whole week and tell you what&apos;s genuinely worth planning around.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
           {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Looking across the week.</h1><p>Balancing weather, air quality, UV, temperature, and daylight.</p></div> : null}
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
           {status.kind === "ready" && location && forecast && activeDay ? <>
@@ -807,20 +870,20 @@ export function HaveAGreatDayApp() {
               <p className="forecast-conversation__kicker">A little plan for your day</p>
               <div key={personalizedVoice ? `${conversationKey}:personal` : `${conversationKey}:instant`} className="forecast-conversation__note">
                 <p className="forecast-conversation__opening">{conversationVoice.opening}</p>
-                <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{conversationInput.windows.map((window, index) => {
+                {conversationVoice.mode === "windows" ? <div className="forecast-conversation__lines" role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{displayedWindows.map((window, index) => {
                   const lead = conversationVoice.leads[index]?.text ?? fallbackVoice?.leads[index]?.text ?? "Another option is";
                   return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span></p>;
-                })}</div>
+                })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>{conversationVoice.mode === "all_day" ? "Choose the time that fits your plans instead of planning around a narrow forecast window." : "Choose another day above and we’ll look for a better opening."}</p></div>}
               </div>
             </section> : <p className="decision-context">No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</p>}
           </> : null}
         </div>
 
         <details ref={methodDetails} className="method-details">
-          <summary>{status.kind === "ready" ? "Why these times?" : "How it works"}</summary>
+          <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
           <div className="method-details__body">
             {status.kind === "ready" && activeDay && activeHours.length ? <>
-              <header className="method-heading"><div><h2>Why these times work</h2><p>{rankingSummary}</p></div><div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div></header>
+              <header className="method-heading"><div><h2>{conversationVoice?.mode === "all_day" ? "Why the whole day works" : conversationVoice?.mode === "none" ? "Why another day is better" : "Why these times work"}</h2><p>{rankingSummary}</p></div>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div> : null}</header>
               <dl className="method-facts">
                 <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
                 <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
@@ -830,7 +893,7 @@ export function HaveAGreatDayApp() {
               <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windows={chartWindows} onHourChange={setChartHour}/>
             </> : <p>We compare seven days of local weather, air quality, UV, and feels-like temperature, then find practical windows throughout each day.</p>}
             <section className="method-breakdown" aria-labelledby="method-breakdown-title">
-              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>We compare four parts of the day, then keep the three with the lowest total tradeoff. {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
+              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{conversationVoice?.mode === "all_day" ? "We checked the full planning day and found that isolated windows would add clutter." : conversationVoice?.mode === "none" ? "We checked the full planning day and did not find a window that cleared the forecast guardrails." : "We compare four parts of the day, then keep only the windows with a worthwhile balance."} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
               {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
               <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
             </section>

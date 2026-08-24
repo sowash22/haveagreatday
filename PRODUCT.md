@@ -12,20 +12,20 @@ People quickly deciding when to walk, run or hike, cycle, walk a dog, or take ch
 
 ## Product purpose
 
-Have a Great Day compares the next seven days of local weather, air quality, UV, temperature, and light conditions, then turns the three strongest windows across Morning, Noon, Evening, and Night into a short, personal plan. It reduces forecast interpretation without claiming that any hour is universally safe.
+Have a Great Day compares the next seven days of local weather, air quality, UV, temperature, and light conditions, then turns that evidence into a short, personal plan. Depending on the day, it can celebrate an all-day opportunity, offer one to three worthwhile windows, or recommend choosing another day. It reduces forecast interpretation without claiming that any hour is universally safe.
 
 ## Primary workflow
 
-Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The main answer automatically ranks four parts of the day and presents up to three options as one conversational note, so people see the strongest choice first while retaining schedule flexibility. Each sentence keeps its time, weather condition, feels-like temperature, AQI, UV, and light status grounded in the app’s forecast calculations. A server-only v2 inference call can personalize only the opening and connective phrases; the deterministic note appears immediately and remains as the fallback. Recent places stay on the device. Opening the method disclosure reveals the windows’ combined measurements, an explorable 6 AM to 10 PM fit chart with all three windows highlighted, the tradeoff method, data source, photo credit, and privacy link.
+Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The app evaluates the full planning day and four practical dayparts, then constrains the possible answer to defensible outcomes. The inference layer chooses whether an all-day note, one to three ranked windows, or an honest “choose another day” message is most useful. Every displayed condition, time, and measurement remains grounded in the app’s forecast calculations, and a deterministic adaptive note appears immediately as the fallback. Recent places stay on the device. Opening the method disclosure reveals the matching day or window measurements, an explorable 6 AM to 10 PM fit chart, the tradeoff method, data source, photo credit, and privacy link.
 
 ## Capabilities and constraints
 
-- One best day with all seven days visible and up to three clearly ranked windows for the selected day.
+- One best day with all seven days visible and an adaptive answer ranging from no recommendation to an all-day recommendation.
 - Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
 - Place search, approximate device location, recent places, an automatic location-aware °C/°F toggle with saved user override, and shareable query parameters.
 - Seven-image weather-matched Unsplash scene pools that advance on refresh and day selection, with local fallbacks for remote failures.
 - A normalized hourly-fit chart that compares weather, air, comfort, and UV without mixing incompatible units.
-- Optional conversational wording through the server-only v2 inference endpoint, with strict input and output validation and an immediate deterministic fallback.
+- Adaptive conversational planning through the server-only v2 inference endpoint, constrained by deterministic severe-weather, forecast-quality, ranking, and output validation guardrails with an immediate local fallback.
 - Metric and imperial display defaults to the location's customary weather unit, then honors a saved user override or explicit query parameter.
 - Forecast quality depends on upstream data and is not medical or safety advice.
 - No account, advertising, first-party analytics, long-range monthly forecast, or primary-screen data dashboard.
