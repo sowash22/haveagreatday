@@ -9,5 +9,5 @@ Mode: Operate
 Audience: People planning time outside without wanting to interpret a full weather dashboard.
 Task: Choose a place, see the single best outdoor window, and scan the next seven days.
 Direction: One immersive, image-backed decision card that fits the viewport on desktop and mobile.
-Memorable moment: The scene responds to the selected activity and forecast weather, making the answer feel like a real invitation outside.
-Constraints: Keep one answer first, show a compact seven-day best-times ribbon, keep saved places inside location selection, and keep evidence inside one bottom disclosure. Do not add activity controls, a page header, page footer, graphs, alternatives, preferences forms, nested cards, decorative dashboard elements, or unsupported safety claims.
+Memorable moment: Every refresh and day selection reveals another weather-matched scene while the glass evidence sheet explains the selected time without leaving the photograph.
+Constraints: Keep one answer first, show a compact seven-day best-times ribbon, keep saved places inside location selection, and keep evidence and real forecast metrics inside one bottom disclosure. Do not add activity controls, a page header, page footer, alternatives, preferences forms, nested cards, decorative dashboard elements, or unsupported safety claims.

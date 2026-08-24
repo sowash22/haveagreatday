@@ -20,16 +20,16 @@ Location search opens a focused dialog. Recent places appear first, followed by 
 - Full-bleed photography with one dark natural scrim and white type.
 - Geist throughout, with a large but bounded recommendation and compact supporting copy.
 - A 16px card radius and rounded controls only where the shape communicates interaction.
-- Translucency is reserved for functional controls and the open method panel.
+- Translucency is reserved for functional controls, the recommendation lens, and the open method panel. These surfaces use a borderless web approximation of liquid glass with tonal highlights, soft depth, and a solid reduced-transparency fallback.
 - No decorative icons, gradients on type, status colors, nested cards, or dashboard chrome.
 
 ## Photography
 
-Use the local, curated Unsplash set. Clear or fair conditions use the selected activity scene. Cloud, rain, and snow forecasts override it with a matching weather scene. Crop with `object-fit: cover`, tune subject position per scene, and keep photographer credit inside the method disclosure.
+Use the local, curated Unsplash set as weather-aware scene pools. Clear or fair conditions use active outdoor scenes. Cloud, rain, and snow forecasts override them with matching weather scenes. Advance the pool only on refresh and day selection, crop with `object-fit: cover`, tune subject position per scene, and keep photographer credit inside the method disclosure.
 
 ## Motion
 
-The background softly resolves from blur and a slight scale when its scene changes. Native view transitions hand off recommendation copy. The method disclosure reveals from the bottom. All motion becomes effectively instant with reduced motion enabled.
+The background softly resolves from blur and a slight scale whenever its scene advances. The next scene preloads so day-to-day exploration feels immediate. Native view transitions hand off recommendation copy. The method disclosure refracts open from the bottom; its compact methodology and sources remain visible inside the more opaque panel. All spatial motion becomes effectively instant with reduced motion enabled.
 
 ## Responsive and accessible behavior
 

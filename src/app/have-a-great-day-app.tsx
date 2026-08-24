@@ -1,16 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
-import { recommendDays, type DayPlan, type HourConditions, type HourRating, type Profile, type TimePreference, type Units } from "../suitability";
+import { PROFILE_WEIGHTS, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
 const PROFILE_KEY = "haveagreatday-profile";
 const UNITS_KEY = "haveagreatday-units";
 const LOCATION_KEY = "haveagreatday-location";
 const LOCATION_HISTORY_KEY = "haveagreatday-locations:v1";
+const SCENE_ROTATION_KEY = "haveagreatday-scene:v1";
 
 function migrateStorage(): void {
   const keys = [
@@ -33,9 +35,9 @@ type Status =
   | { kind: "idle" | "loading" | "ready" }
   | { kind: "error"; title: string; message: string; retry: boolean };
 
-type Scene = { src: string; photographer: string; href: string };
+type Scene = { src: string; photographer: string; href: string; position?: string };
 
-const SCENES: Record<SceneKey, Scene> = {
+const BASE_SCENES: Record<SceneKey, Scene> = {
   walk: { src: "/scene-walk.jpg", photographer: "Annie Spratt", href: "https://unsplash.com/photos/MkQmva8z5oI" },
   run: { src: "/scene-run.jpg", photographer: "Phil Aicken", href: "https://unsplash.com/photos/JsSw0qpikmQ" },
   cycle: { src: "/scene-cycle.jpg", photographer: "Eliézer Fernandes", href: "https://unsplash.com/photos/DT4cnNNpINs" },
@@ -45,6 +47,51 @@ const SCENES: Record<SceneKey, Scene> = {
   rain: { src: "/scene-rain.jpg", photographer: "Yan F", href: "https://unsplash.com/photos/AJeAR_FMgww" },
   snow: { src: "/scene-snow.jpg", photographer: "Ben Kupke", href: "https://unsplash.com/photos/Hl7D_ZOo4jk" },
 };
+
+const CLEAR_SUNPATH: Scene = { src: "/scene-clear-sunpath.jpg", photographer: "Tunahan Kuzgun", href: "https://unsplash.com/photos/u2bL7sIdA1E", position: "center 56%" };
+const CLEAR_DOGWALK: Scene = { src: "/scene-clear-dogwalk.jpg", photographer: "Brooke Balentine", href: "https://unsplash.com/photos/3mu-RJ7-TXc", position: "center 58%" };
+const CLEAR_SCENES: readonly Scene[] = [CLEAR_SUNPATH, CLEAR_DOGWALK];
+
+const SCENE_POOLS: Record<SceneKey, readonly Scene[]> = {
+  walk: [BASE_SCENES.walk, ...CLEAR_SCENES],
+  run: [BASE_SCENES.run, ...CLEAR_SCENES],
+  cycle: [BASE_SCENES.cycle, ...CLEAR_SCENES],
+  family: [BASE_SCENES.family, ...CLEAR_SCENES],
+  dog: [BASE_SCENES.dog, CLEAR_DOGWALK, CLEAR_SUNPATH],
+  cloudy: [
+    BASE_SCENES.cloudy,
+    { src: "/scene-cloudy-autumn.jpg", photographer: "Gennady Zakharin", href: "https://unsplash.com/photos/O2CVeC8zyFs", position: "center 54%" },
+    { src: "/scene-cloudy-fog.jpg", photographer: "Nadiia Shuran", href: "https://unsplash.com/photos/N5LcYyNomKc", position: "center 58%" },
+  ],
+  rain: [
+    BASE_SCENES.rain,
+    { src: "/scene-rain-dogwalk.jpg", photographer: "Martin Koloski", href: "https://unsplash.com/photos/VXfz0gnHIRg", position: "center 54%" },
+    { src: "/scene-rain-umbrellas.jpg", photographer: "Kouji Tsuru", href: "https://unsplash.com/photos/dxi_FQzoGBo", position: "center 48%" },
+  ],
+  snow: [
+    BASE_SCENES.snow,
+    { src: "/scene-snow-forest.jpg", photographer: "Sandra", href: "https://unsplash.com/photos/tRGcPlYH_cI", position: "center 58%" },
+    { src: "/scene-snow-path.jpg", photographer: "stenedit", href: "https://unsplash.com/photos/vlDO_Q821UQ", position: "center 60%" },
+  ],
+};
+
+const METRIC_LABELS: Record<ComponentName, string> = {
+  weather: "Weather",
+  air: "Air",
+  temperature: "Comfort",
+  uv: "UV",
+};
+
+function nextSceneSequence(): number {
+  try {
+    const previous = Number.parseInt(sessionStorage.getItem(SCENE_ROTATION_KEY) ?? "0", 10);
+    const next = Number.isFinite(previous) ? previous + 1 : 1;
+    sessionStorage.setItem(SCENE_ROTATION_KEY, String(next));
+    return next;
+  } catch {
+    return Date.now();
+  }
+}
 
 function readChoice<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
@@ -176,6 +223,17 @@ function maxValue(values: Array<number | null>): number | null {
   return present.length ? Math.max(...present) : null;
 }
 
+function componentAverage(ratings: HourRating[], component: ComponentName): number | null {
+  return average(ratings.map((rating) => rating.components[component] ?? null));
+}
+
+function tradeoffLabel(value: number | null): string {
+  if (value === null) return "Not available";
+  if (value < 20) return "Low tradeoff";
+  if (value < 50) return "Some tradeoff";
+  return "Higher tradeoff";
+}
+
 function reasonSummary(ratings: HourRating[]): string | null {
   const reason = ratings.flatMap((rating) => rating.reasons)[0];
   return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
@@ -203,11 +261,16 @@ export function HaveAGreatDayApp() {
   const [locating, setLocating] = useState(false);
   const [forgotten, setForgotten] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [sceneSequence, setSceneSequence] = useState(0);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
   const profile = ACTIVITIES[activity].profile;
+
+  const advanceScene = useCallback(() => {
+    setSceneSequence(nextSceneSequence());
+  }, []);
 
   const openPlaceDialog = useCallback(() => {
     placeDialog.current?.showModal();
@@ -238,6 +301,7 @@ export function HaveAGreatDayApp() {
   }, []);
 
   useEffect(() => {
+    setSceneSequence(nextSceneSequence());
     migrateStorage();
     const params = new URLSearchParams(window.location.search);
     const legacyProfile = readChoice<Profile>(PROFILE_KEY, ["general", "air", "temperature", "strenuous"], "general");
@@ -348,7 +412,10 @@ export function HaveAGreatDayApp() {
   }
 
   function chooseDate(date: string) {
-    updateWithTransition(() => setSelectedDate(date));
+    updateWithTransition(() => {
+      setSelectedDate(date);
+      advanceScene();
+    });
   }
 
   function forgetLocation() {
@@ -374,20 +441,46 @@ export function HaveAGreatDayApp() {
   const meanAqi = average(activeHours.map((hour) => hour.usAqi));
   const maxUv = maxValue(activeHours.map((hour) => hour.uvIndex));
   const maxRain = maxValue(activeHours.map((hour) => hour.precipitationProbability));
-  const missing = [...new Set(activeRatings.flatMap((rating) => rating.missing))];
-  const warnings = forecast ? [...forecast.warnings, ...(missing.length ? [`This window is missing ${missing.join(" and ")} data.`] : [])] : [];
+  const metricTradeoffs = {
+    temperature: componentAverage(activeRatings, "temperature"),
+    weather: componentAverage(activeRatings, "weather"),
+    air: componentAverage(activeRatings, "air"),
+    uv: componentAverage(activeRatings, "uv"),
+  };
   const currentDate = localHour.slice(0, 10);
   const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
   const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
   const representativeWeather = activeHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
-  const scene = SCENES[sceneKey];
+  const scenePool = SCENE_POOLS[sceneKey];
+  const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
+  const scene = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
+  const greatTimeFit = activeDay?.score === null || activeDay?.score === undefined ? null : Math.max(0, 100 - activeDay.score);
+  const activeRank = activeDay ? rankedDays.findIndex((day) => day.date === activeDay.date) + 1 : 0;
+  const rankingSummary = activeIsTop
+    ? "Best balance across the next seven days."
+    : activeDay
+      ? `Best window on ${dayName(activeDay.date)}${activeRank > 0 ? `. ${activeRank} of ${rankedDays.length} this week.` : "."}`
+      : "We compare each available daylight window.";
+  const profileWeights = Object.entries(PROFILE_WEIGHTS[profile])
+    .toSorted(([, first], [, second]) => second - first) as Array<[ComponentName, number]>;
 
-  return <>
+  useEffect(() => {
+    const nextScene = scenePool[(sceneIndex + 1) % scenePool.length];
+    if (!nextScene || nextScene.src === scene.src) return;
+    const image = new window.Image();
+    const source = encodeURIComponent(nextScene.src);
+    const widths = [640, 828, 1200, 1920];
+    image.srcset = widths.map((width) => `/_next/image?url=${source}&w=${width}&q=75 ${width}w`).join(", ");
+    image.sizes = "(max-width: 1248px) 100vw, 1216px";
+    image.src = `/_next/image?url=${source}&w=1200&q=75`;
+  }, [scene.src, sceneIndex, scenePool]);
+
+  return <div className="experience-root">
     <a className="skip-link" href="#main">Skip to planner</a>
     <main id="main" className="single-screen">
       <section className="decision-card" data-scene={sceneKey} aria-labelledby="decision-title">
-        <img key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fetchPriority="high"/>
+        <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" style={scene.position ? { objectPosition: scene.position } : undefined}/>
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
@@ -411,15 +504,22 @@ export function HaveAGreatDayApp() {
         </div>
 
         <details className="method-details">
-          <summary>{status.kind === "ready" ? "Why this time" : "How it works"}</summary>
+          <summary><span>{status.kind === "ready" ? "Why this time" : "How it works"}</span>{greatTimeFit !== null ? <strong>{greatTimeFit}/100 fit</strong> : null}</summary>
           <div className="method-details__body">
             {status.kind === "ready" && activeDay && activeHours.length ? <>
-              <dl className="method-facts"><div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd></div><div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd></div><div><dt>Air</dt><dd>{formatValue(meanAqi, " AQI")}</dd></div><div><dt>UV</dt><dd>{maxUv === null ? "Unavailable" : maxUv.toFixed(1)}</dd></div></dl>
-              <p>{reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "This window has the lowest combined forecast tradeoffs."}</p>
-              {warnings.length ? <p>{warnings.join(" ")}</p> : null}
-              <p>We rank consecutive daylight hours from the next seven days. This is a planning aid, not a safety guarantee or medical advice.</p>
+              <header className="method-heading"><div><h2>Why this time works</h2><p>{rankingSummary}</p></div><div className="fit-score"><strong>{greatTimeFit}</strong><span>Great-time fit</span></div></header>
+              <dl className="method-facts">
+                <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
+                <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
+                <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
+                <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
+              </dl>
             </> : <p>We compare seven days of local weather, air quality, UV, feels-like temperature, and daylight, then pick the lowest-tradeoff outdoor window.</p>}
-            <footer>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash <span aria-hidden="true">·</span> <a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a> <span aria-hidden="true">·</span> <Link href="/privacy">Privacy</Link></footer>
+            <section className="method-breakdown" aria-labelledby="method-breakdown-title">
+              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>We compare daylight hours and choose the lowest total tradeoff. {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
+              {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
+              <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
+            </section>
           </div>
         </details>
       </section>
@@ -433,5 +533,5 @@ export function HaveAGreatDayApp() {
       <div className="search-results" aria-live="polite">{searchResults.length > 0 ? <ul>{searchResults.map((result) => <li key={`${result.latitude}-${result.longitude}`}><button type="button" onClick={() => chooseLocation(result)}><span>{result.name}</span><small>{[result.region, result.country].filter(Boolean).join(", ")}</small></button></li>)}</ul> : null}</div>
       <div className="privacy-note"><p>No account or analytics. Only rounded coordinates leave this device.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
     </div></dialog>
-  </>;
+  </div>;
 }

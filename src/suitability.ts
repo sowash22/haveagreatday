@@ -39,7 +39,7 @@ export type DayPlan = {
   score: number | null;
 };
 
-const WEIGHTS: Record<Profile, Record<ComponentName, number>> = {
+export const PROFILE_WEIGHTS: Record<Profile, Record<ComponentName, number>> = {
   general: { air: 0.25, temperature: 0.25, weather: 0.35, uv: 0.15 },
   air: { air: 0.5, temperature: 0.2, weather: 0.2, uv: 0.1 },
   temperature: { air: 0.25, temperature: 0.45, weather: 0.2, uv: 0.1 },
@@ -107,11 +107,11 @@ export function rateHour(hour: HourConditions, profile: Profile): HourRating {
   if (hour.uvIndex !== null) components.uv = uvPenalty(hour.uvIndex);
 
   const names = Object.keys(components) as ComponentName[];
-  const missing = (Object.keys(WEIGHTS[profile]) as ComponentName[]).filter((name) => components[name] === undefined);
-  const weightTotal = names.reduce((sum, name) => sum + WEIGHTS[profile][name], 0);
+  const missing = (Object.keys(PROFILE_WEIGHTS[profile]) as ComponentName[]).filter((name) => components[name] === undefined);
+  const weightTotal = names.reduce((sum, name) => sum + PROFILE_WEIGHTS[profile][name], 0);
   const weighted = names.map((name) => ({
     name,
-    contribution: (components[name] ?? 0) * WEIGHTS[profile][name] / (weightTotal || 1),
+    contribution: (components[name] ?? 0) * PROFILE_WEIGHTS[profile][name] / (weightTotal || 1),
   }));
   const score = names.length ? Math.round(weighted.reduce((sum, item) => sum + item.contribution, 0)) : 100;
   const label = score < 25 && names.length >= 3

@@ -23,7 +23,7 @@ Choose a place and read one answer. A compact week ribbon shows every upcoming b
 - One best seven-day recommendation with all seven daily windows visible.
 - Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
 - Place search, approximate device location, recent places, and shareable query parameters.
-- Weather and activity-matched local Unsplash photography.
+- Weather-matched local Unsplash scene pools that advance on refresh and day selection.
 - Metric and imperial display honored from saved preference or query parameters.
 - Forecast quality depends on upstream data and is not medical or safety advice.
 - No account, analytics, long-range monthly forecast, or primary-screen data dashboard.
