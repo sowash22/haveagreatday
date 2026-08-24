@@ -70,6 +70,23 @@ export function uvPenalty(uv: number): number {
   return 100;
 }
 
+export function uvCategory(uv: number): "Low" | "Moderate" | "High" | "Very high" | "Extreme" {
+  if (uv <= 2) return "Low";
+  if (uv <= 5) return "Moderate";
+  if (uv <= 7) return "High";
+  if (uv <= 10) return "Very high";
+  return "Extreme";
+}
+
+export function aqiCategory(aqi: number): "Good" | "Moderate" | "Unhealthy for sensitive groups" | "Unhealthy" | "Very unhealthy" | "Hazardous" {
+  if (aqi <= 50) return "Good";
+  if (aqi <= 100) return "Moderate";
+  if (aqi <= 150) return "Unhealthy for sensitive groups";
+  if (aqi <= 200) return "Unhealthy";
+  if (aqi <= 300) return "Very unhealthy";
+  return "Hazardous";
+}
+
 export function temperaturePenalty(celsius: number): number {
   if (celsius >= 40) return 100;
   if (celsius < -5 || celsius >= 36) return 80;

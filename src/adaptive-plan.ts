@@ -20,6 +20,10 @@ const HEAVY_WEATHER_CODES = new Set([65, 67, 75, 82, 86, 95, 96, 99]);
 const RAIN_CODES = new Set([61, 63, 65, 66, 67, 80, 81, 82]);
 const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
 
+function isPracticalRecommendationHour(hour: HourConditions): boolean {
+  return !isOutdoorBlockingHour(hour) && (hour.uvIndex === null || hour.uvIndex < 8);
+}
+
 export function isOutdoorBlockingHour(hour: HourConditions): boolean {
   const code = hour.weatherCode;
   const precipitation = hour.precipitationProbability;
@@ -50,7 +54,7 @@ export function assessAdaptiveDay(hours: HourConditions[], rankedPeriods: Adapti
     period.score !== null
     && period.score < 50
     && period.hours.length > 0
-    && period.hours.every((hour) => !isOutdoorBlockingHour(hour)),
+    && period.hours.every(isPracticalRecommendationHour),
   ).slice(0, 3);
 
   const poorDay = hours.length === 0
@@ -62,7 +66,8 @@ export function assessAdaptiveDay(hours: HourConditions[], rankedPeriods: Adapti
     && blockedHourShare === 0
     && favorableHourShare >= 0.75
     && usableHourShare >= 0.9
-    && completeEnoughShare >= 0.75;
+    && completeEnoughShare >= 0.75
+    && hours.every((hour) => hour.uvIndex !== null && hour.uvIndex < 3);
 
   if (poorDay) {
     return {

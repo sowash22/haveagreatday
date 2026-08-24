@@ -12,7 +12,7 @@ People quickly deciding when to walk, run or hike, cycle, walk a dog, or take ch
 
 ## Product purpose
 
-Have a Great Day is an outdoor planning companion, not just another weather dashboard. It compares the next seven days of local weather, air quality, UV, comfort, and daylight, then uses a small, constrained inference layer to turn that evidence into a short, personal plan for walking, hiking, riding, or spending time outside with children and pets. A usable day always offers two or three daylight windows; a consistently favorable day can still be celebrated as an all-day opportunity, while an impractical day recommends choosing another day. It reduces forecast interpretation without claiming that any hour is universally safe.
+Have a Great Day is an outdoor planning companion, not just another weather dashboard. It compares the next seven days of local weather, air quality, UV, comfort, and daylight, then uses a small, constrained inference layer to turn that evidence into a short, personal plan for walking, hiking, riding, or spending time outside with children and pets. A usable day always offers two or three daylight windows; a consistently favorable day can still be celebrated as an all-day opportunity only when UV remains low, while an impractical day recommends choosing another day. It reduces forecast interpretation without claiming that any hour is universally safe.
 
 ## Primary workflow
 
@@ -25,6 +25,7 @@ Choose a place and read one day at a glance. A compact week ribbon shows day nam
 - Place search, approximate device location, recent places, an automatic location-aware °C/°F toggle with saved user override, and shareable query parameters.
 - Seven-image weather-matched Unsplash scene pools that advance on refresh and day selection, with local fallbacks for remote failures.
 - Adaptive conversational planning through the server-only v2 inference endpoint, constrained by deterministic severe-weather, forecast-quality, ranking, and output validation guardrails with an immediate local fallback.
+- Public-health-aligned UV guidance: protection begins at UV 3, very-high UV from 8 is excluded from preferred windows, and an all-day recommendation requires complete hourly UV data below 3.
 - Metric and imperial display defaults to the location's customary weather unit, then honors a saved user override or explicit query parameter.
 - Forecast quality depends on upstream data and is not medical or safety advice.
 - No account, advertising, first-party analytics, long-range monthly forecast, or primary-screen data dashboard.

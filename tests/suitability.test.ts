@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   aqiPenalty,
+  aqiCategory,
   rateHour,
   recommend,
   recommendDays,
   temperaturePenalty,
   uvPenalty,
+  uvCategory,
   weatherPenalty,
   type HourConditions,
 } from "../src/suitability.ts";
@@ -29,6 +31,11 @@ describe("component penalties", () => {
 
   it("uses every UV boundary", () => {
     expect([2, 3, 5, 6, 7, 8, 10, 11].map(uvPenalty)).toEqual([0, 30, 30, 55, 55, 80, 80, 100]);
+  });
+
+  it("uses public UV and AQI category boundaries", () => {
+    expect([2, 3, 5, 6, 7, 8, 10, 11].map(uvCategory)).toEqual(["Low", "Moderate", "Moderate", "High", "High", "Very high", "Very high", "Extreme"]);
+    expect([50, 51, 100, 101, 150, 151, 200, 201, 300, 301].map(aqiCategory)).toEqual(["Good", "Moderate", "Moderate", "Unhealthy for sensitive groups", "Unhealthy for sensitive groups", "Unhealthy", "Unhealthy", "Very unhealthy", "Very unhealthy", "Hazardous"]);
   });
 
   it("uses the hot and cold temperature boundaries", () => {

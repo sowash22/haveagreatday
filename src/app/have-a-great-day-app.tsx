@@ -7,7 +7,7 @@ import { assessAdaptiveDay } from "../adaptive-plan";
 import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
-import { PROFILE_WEIGHTS, rateHour, recommend, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
+import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
 const PROFILE_KEY = "haveagreatday-profile";
@@ -250,10 +250,6 @@ function formatValue(value: number | null, suffix = ""): string {
   return value === null ? "Unavailable" : `${Math.round(value)}${suffix}`;
 }
 
-function selectedRatings(day: WindowPlan | undefined): HourRating[] {
-  return day?.recommendation.hours.flatMap((index) => day.recommendation.ratings[index] ? [day.recommendation.ratings[index]] : []) ?? [];
-}
-
 function selectedHours(day: WindowPlan | undefined): HourConditions[] {
   return day?.recommendation.hours.flatMap((index) => day.conditions[index] ? [day.conditions[index]] : []) ?? [];
 }
@@ -316,6 +312,30 @@ function maxValue(values: Array<number | null>): number | null {
   return present.length ? Math.max(...present) : null;
 }
 
+function thresholdTimeSpan(hours: HourConditions[], value: (hour: HourConditions) => number | null, threshold: number): string | null {
+  const matching = hours.filter((hour) => (value(hour) ?? -Infinity) >= threshold);
+  const first = matching[0]?.time;
+  const last = matching.at(-1)?.time;
+  return first && last ? `${formatTime(first, { hour: "numeric" })} to ${formatTime(nextHour(last), { hour: "numeric" })}` : null;
+}
+
+function temperatureComfortLabel(celsius: number | null): string {
+  if (celsius === null) return "Not available";
+  if (celsius < 0) return "Very cold";
+  if (celsius < 10) return "Cool";
+  if (celsius <= 26) return "Comfortable";
+  if (celsius < 33) return "Warm";
+  return "Hot";
+}
+
+function rainChanceLabel(chance: number | null): string {
+  if (chance === null) return "Not available";
+  if (chance <= 10) return "Dry";
+  if (chance <= 30) return "Small chance";
+  if (chance <= 60) return "Possible";
+  return "Likely";
+}
+
 function periodEvidence(day: WindowPlan, units: Units): { condition: string; temperature: string; aqi: string; uv: string } {
   const hours = selectedHours(day);
   const temperature = average(hours.map((hour) => hour.apparentTemperatureC));
@@ -324,8 +344,8 @@ function periodEvidence(day: WindowPlan, units: Units): { condition: string; tem
   return {
     condition: weatherConditionLabel(hours.map((hour) => hour.weatherCode)),
     temperature: temperature === null ? "No temp" : formatTemperature(temperature, units).replace(" ", "\u00a0"),
-    aqi: aqi === null ? "AQI unavailable" : `AQI ${Math.round(aqi)}`,
-    uv: uv === null ? "UV unavailable" : `UV ${uv.toFixed(1)}`,
+    aqi: aqi === null ? "AQI unavailable" : `AQI ${Math.round(aqi)} (${aqiCategory(aqi).toLowerCase()})`,
+    uv: uv === null ? "UV unavailable" : `UV ${uv.toFixed(1)} (${uvCategory(uv).toLowerCase()})`,
   };
 }
 
@@ -355,8 +375,8 @@ function conversationDaySummary(hours: HourConditions[], units: Units): Conversa
     condition: weatherConditionLabel(hours.map((hour) => hour.weatherCode)),
     temperature: temperatureRange(hours.map((hour) => hour.apparentTemperatureC), units),
     rain: rain === null ? "Rain chance unavailable" : `Rain up to ${Math.round(rain)}%`,
-    aqi: aqi === null ? "Air quality unavailable" : `Air peaks at AQI ${Math.round(aqi)}`,
-    uv: uv === null ? "UV unavailable" : `UV peaks at ${uv.toFixed(1)}`,
+    aqi: aqi === null ? "Air quality unavailable" : `Air peaks at AQI ${Math.round(aqi)} (${aqiCategory(aqi).toLowerCase()})`,
+    uv: uv === null ? "UV unavailable" : `${uvCategory(uv)} UV peaks at ${uv.toFixed(1)}`,
     light: daylightSummary(hours),
   };
 }
@@ -365,24 +385,16 @@ function componentAverage(ratings: HourRating[], component: ComponentName): numb
   return average(ratings.map((rating) => rating.components[component] ?? null));
 }
 
-function tradeoffLabel(value: number | null): string {
-  if (value === null) return "Not available";
-  if (value < 20) return "Low tradeoff";
-  if (value < 50) return "Some tradeoff";
-  return "Higher tradeoff";
-}
-
-function reasonSummary(ratings: HourRating[]): string | null {
-  const reason = ratings.flatMap((rating) => rating.reasons)[0];
-  return reason?.replace(/ contributes \d+ points$/, " is the main tradeoff") ?? null;
-}
-
 function excludedPeriodNote(period: PeriodPlan, profile: Profile, currentLocalHour: string): string {
   const future = period.conditions.filter((hour) => hour.time > currentLocalHour);
   if (!future.length) return `${PERIOD_NAMES[period.id]} has already passed.`;
   if (future.every((hour) => hour.isDay !== true)) return `${PERIOD_NAMES[period.id]} falls after dark, so it is not part of the plan.`;
 
-  const ratings = future.filter((hour) => hour.isDay === true).map((hour) => rateHour(hour, profile));
+  const daylight = future.filter((hour) => hour.isDay === true);
+  const peakUv = maxValue(daylight.map((hour) => hour.uvIndex));
+  if (peakUv !== null && peakUv >= 8) return `${PERIOD_NAMES[period.id]} is left out because UV reaches ${uvCategory(peakUv).toLowerCase()} levels.`;
+
+  const ratings = daylight.map((hour) => rateHour(hour, profile));
   const tradeoffs = (Object.keys(METRIC_LABELS) as ComponentName[])
     .map((name) => ({ name, value: componentAverage(ratings, name) }))
     .filter((item): item is { name: ComponentName; value: number } => item.value !== null)
@@ -708,17 +720,13 @@ export function HaveAGreatDayApp() {
     .filter((period) => !conversationVoice?.selectedIds.includes(period.id) && period.conditions.some((hour) => hour.time > localHour))
     .map((period) => excludedPeriodNote(period, profile, localHour)), [activePeriods, conversationVoice, localHour, profile]);
   const activeHours = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedHours(period)) : planningHours;
-  const activeRatings = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedRatings(period)) : planningHours.map((hour) => rateHour(hour, profile));
   const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
-  const meanAqi = average(activeHours.map((hour) => hour.usAqi));
+  const maxAqi = maxValue(activeHours.map((hour) => hour.usAqi));
   const maxUv = maxValue(activeHours.map((hour) => hour.uvIndex));
   const maxRain = maxValue(activeHours.map((hour) => hour.precipitationProbability));
-  const metricTradeoffs = {
-    temperature: componentAverage(activeRatings, "temperature"),
-    weather: componentAverage(activeRatings, "weather"),
-    air: componentAverage(activeRatings, "air"),
-    uv: componentAverage(activeRatings, "uv"),
-  };
+  const dayMaxUv = maxValue(planningHours.map((hour) => hour.uvIndex));
+  const uvProtectionSpan = thresholdTimeSpan(planningHours, (hour) => hour.uvIndex, 3);
+  const veryHighUvSpan = thresholdTimeSpan(planningHours, (hour) => hour.uvIndex, 8);
   const sceneHours = selectedHours(activeDay);
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
@@ -726,28 +734,43 @@ export function HaveAGreatDayApp() {
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
   const sceneCandidate = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
   const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
-  const recommendationScore = conversationVoice?.mode === "none" ? null : average(activeRatings.map((rating) => rating.score));
-  const greatTimeFit = recommendationScore === null ? null : Math.max(0, Math.round(100 - recommendationScore));
-  const rankingSummary = conversationVoice?.mode === "all_day"
-    ? `${activeDayLabel} stays comfortable across the daylight hours. These are the easiest times to plan around.`
-    : conversationVoice?.mode === "none"
-      ? `${activeDayLabel} does not give us a practical set of daylight windows we can recommend with confidence.`
-      : displayedPeriods.length
-        ? `These are the ${displayedPeriods.length === 2 ? "two" : "three"} strongest daylight windows after comparing comfort, weather, air quality, and UV.`
-        : "We compare weather, air quality, UV, comfort, and daylight to find practical times outside.";
+  const rankingSummary = conversationVoice?.mode === "none"
+    ? `${activeDayLabel} does not give us two practical daylight windows we can recommend with confidence.`
+    : dayMaxUv !== null && dayMaxUv >= 8
+      ? `${activeDayLabel} has workable conditions earlier and later, but UV reaches ${uvCategory(dayMaxUv).toLowerCase()} levels around midday.`
+      : dayMaxUv !== null && dayMaxUv >= 3
+        ? `${activeDayLabel} has worthwhile outdoor windows. We favor times with lower UV and a better balance of comfort, air, and weather.`
+        : conversationVoice?.mode === "all_day"
+          ? `${activeDayLabel} stays comfortable and UV remains low across the daylight hours we checked.`
+          : displayedPeriods.length
+            ? `These are the ${displayedPeriods.length === 2 ? "two" : "three"} strongest daylight windows after comparing comfort, weather, air quality, and UV.`
+            : "We compare weather, air quality, UV, comfort, and daylight to find practical times outside.";
   const methodTitle = !conversationVoice
-    ? "A simpler way to plan outside"
-    : conversationVoice.mode === "all_day"
-      ? "A flexible day outside"
-      : conversationVoice.mode === "none"
-        ? "Better saved for another day"
-        : "Why these times stand out";
-  const methodExplanation = conversationVoice?.mode === "none"
-    ? "We score every daylight hour, but the day does not leave enough consistently practical choices."
-    : "We score every daylight hour, then keep the two or three strongest windows so you have practical choices.";
-  const fitLabel = conversationVoice?.mode === "all_day" ? "Day fit" : "Time fit";
-  const profileWeights = Object.entries(PROFILE_WEIGHTS[profile])
-    .toSorted(([, first], [, second]) => second - first) as Array<[ComponentName, number]>;
+    ? "How the plan comes together"
+    : conversationVoice.mode === "none"
+      ? "No practical pair of windows"
+      : dayMaxUv !== null && dayMaxUv >= 8
+        ? "Plan around the strongest sun"
+        : dayMaxUv !== null && dayMaxUv >= 3
+          ? "A good day with sun protection"
+          : conversationVoice.mode === "all_day"
+            ? "A genuinely flexible day"
+            : "These times offer the best balance";
+  const practicalPlanTitle = dayMaxUv === null
+    ? "Check the sun before you go"
+    : dayMaxUv >= 8
+      ? "Avoid the UV peak when you can"
+      : dayMaxUv >= 3
+        ? "Plan for sun protection"
+        : "UV stays low";
+  const practicalPlan = dayMaxUv === null
+    ? "UV data is unavailable, so this plan cannot account for sun exposure. Check local UV guidance before a longer outing."
+    : dayMaxUv >= 8
+      ? `UV reaches ${uvCategory(dayMaxUv).toLowerCase()} levels ${veryHighUvSpan ? `from ${veryHighUvSpan}` : "around midday"}. Prefer the recommended earlier or later windows. Sun protection is recommended${uvProtectionSpan ? ` from ${uvProtectionSpan}` : " whenever UV is 3 or higher"}: seek shade and use protective clothing, a broad-brimmed hat, sunglasses, and broad-spectrum sunscreen.`
+      : dayMaxUv >= 3
+        ? `Sun protection is recommended${uvProtectionSpan ? ` from ${uvProtectionSpan}` : " around midday"}, when UV is 3 or higher. Seek shade and use protective clothing, a broad-brimmed hat, sunglasses, and broad-spectrum sunscreen.`
+        : "UV stays low in the hours checked. Under normal circumstances, no special UV protection is needed for a short outing.";
+  const methodExplanation = "We compare weather, feels-like temperature, US AQI, UV, and daylight hour by hour. Very-high UV, severe weather, unhealthy air, and extreme temperatures act as guardrails, not small deductions in a score.";
   useEffect(() => {
     conversationController.current?.abort();
     if (!conversationInput || !conversationKey) return;
@@ -831,21 +854,21 @@ export function HaveAGreatDayApp() {
         <div className="card-footer">
           <div className="card-disclosures">
             <details ref={methodDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && founderDetails.current?.open) founderDetails.current.open = false; }}>
-              <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
+              <summary>{status.kind === "ready" ? "Why this plan?" : "How it works"}</summary>
               <div className="method-details__body">
-                <header className="method-heading"><div><h2>{methodTitle}</h2><p>{rankingSummary}</p></div><div className="method-heading__aside"><button className="sheet-close" type="button" onClick={() => closeDisclosure(methodDetails.current)}>Close</button>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>{fitLabel}</span></div> : null}</div></header>
+                <header className="method-heading"><div><h2>{methodTitle}</h2><p>{rankingSummary}</p></div><button className="sheet-close" type="button" onClick={() => closeDisclosure(methodDetails.current)}>Close</button></header>
                 {status.kind === "ready" && activeDay && activeHours.length ? <>
                   <dl className="method-facts">
-                    <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
-                    <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
-                    <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
-                    <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
+                    <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd><small>{temperatureComfortLabel(meanTemperature)}</small></div>
+                    <div><dt>Rain chance</dt><dd>{formatValue(maxRain, "%")}</dd><small>{rainChanceLabel(maxRain)}</small></div>
+                    <div><dt>Air in plan</dt><dd>{maxAqi === null ? "No data" : formatValue(maxAqi, " AQI")}</dd><small>{maxAqi === null ? "Not available" : aqiCategory(maxAqi)}</small></div>
+                    <div><dt>UV in plan</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd><small>{maxUv === null ? "Not available" : uvCategory(maxUv)}</small></div>
                   </dl>
                 </> : null}
-                <section className="method-breakdown" aria-labelledby="method-breakdown-title">
-                  {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{methodExplanation} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">How we decide</h3>}
-                  {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
-                </section>
+                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-guidance">
+                  <section className="method-guidance__plan" aria-labelledby="practical-plan-title"><h3 id="practical-plan-title">{practicalPlanTitle}</h3><p>{practicalPlan}</p></section>
+                  <section className="method-breakdown" aria-labelledby="method-breakdown-title"><h3 id="method-breakdown-title">Why this plan</h3><p>{methodExplanation}</p></section>
+                </div> : null}
               </div>
             </details>
 

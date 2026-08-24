@@ -29,6 +29,22 @@ describe("adaptive day assessment", () => {
     expect(decision.defaultWindowCount).toBe(3);
   });
 
+  it("does not make an all-day claim once sun protection is needed", () => {
+    const hours = Array.from({ length: 10 }, (_, index) => hour(index + 7, { uvIndex: index >= 3 && index <= 6 ? 5 : 1 }));
+    const decision = assessAdaptiveDay(hours, [period("morning", 4, hours.slice(0, 2)), period("noon", 10, hours.slice(4, 6)), period("evening", 5, hours.slice(8, 10))], "general");
+    expect(decision.allowedModes).not.toContain("all_day");
+    expect(decision.defaultMode).toBe("windows");
+  });
+
+  it("keeps earlier and later options but omits a very-high-UV period", () => {
+    const morning = [hour(7), hour(8)];
+    const midday = [hour(12, { uvIndex: 8.6 }), hour(13, { uvIndex: 9 })];
+    const evening = [hour(17, { uvIndex: 2 }), hour(18, { uvIndex: 1 })];
+    const decision = assessAdaptiveDay([...morning, ...midday, ...evening], [period("morning", 2, morning), period("noon", 12, midday), period("evening", 3, evening)], "general");
+    expect(decision.defaultMode).toBe("windows");
+    expect(decision.candidateIds).toEqual(["morning", "evening"]);
+  });
+
   it("offers no token windows during a storm-dominated day", () => {
     const hours = Array.from({ length: 10 }, (_, index) => hour(index + 7, { weatherCode: 95, precipitationProbability: 90, windGustKph: 65 }));
     const decision = assessAdaptiveDay(hours, [period("morning", 35, hours.slice(0, 2)), period("evening", 35, hours.slice(7, 9))], "general");
