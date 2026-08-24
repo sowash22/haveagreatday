@@ -16,7 +16,7 @@ Have a Great Day is an outdoor planning companion, not just another weather dash
 
 ## Primary workflow
 
-Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The app evaluates daylight hours across four dayparts, then constrains the possible answer to defensible outcomes. The inference layer chooses whether an all-day note with two or three practical windows, two or three ranked windows, or an honest “choose another day” message is most useful. Every displayed condition, time, and measurement remains grounded in the app’s forecast calculations, and a deterministic adaptive note appears immediately as the fallback. Recent places stay on the device. Two adjacent disclosures keep supporting context out of the primary task: one reveals the matching measurements, hourly-fit chart, tradeoff method, sources, and privacy link; the other shares the personal story and restraint behind the product.
+Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The app evaluates daylight hours across four dayparts, then constrains the possible answer to defensible outcomes. The inference layer chooses whether an all-day note with two or three practical windows, two or three ranked windows, or an honest “choose another day” message is most useful. Every displayed condition, time, and measurement remains grounded in the app’s forecast calculations, and a deterministic adaptive note appears immediately as the fallback. Recent places stay on the device. Two adjacent disclosures keep supporting context out of the primary task: one reveals the matching measurements and tradeoff method; the other shares the personal story and restraint behind the product. The current photo credit stays quietly visible at the bottom right of the main image.
 
 ## Capabilities and constraints
 
@@ -24,7 +24,6 @@ Choose a place and read one day at a glance. A compact week ribbon shows day nam
 - Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
 - Place search, approximate device location, recent places, an automatic location-aware °C/°F toggle with saved user override, and shareable query parameters.
 - Seven-image weather-matched Unsplash scene pools that advance on refresh and day selection, with local fallbacks for remote failures.
-- A normalized hourly-fit chart that compares weather, air, comfort, and UV without mixing incompatible units.
 - Adaptive conversational planning through the server-only v2 inference endpoint, constrained by deterministic severe-weather, forecast-quality, ranking, and output validation guardrails with an immediate local fallback.
 - Metric and imperial display defaults to the location's customary weather unit, then honors a saved user override or explicit query parameter.
 - Forecast quality depends on upstream data and is not medical or safety advice.

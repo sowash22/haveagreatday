@@ -127,11 +127,6 @@ const METRIC_LABELS: Record<ComponentName, string> = {
   uv: "UV",
 };
 
-type ChartPoint = {
-  hour: number;
-  fits: Partial<Record<ComponentName, number>>;
-};
-
 type WindowPlan = { conditions: HourConditions[]; recommendation: Recommendation };
 type PeriodId = "morning" | "noon" | "evening" | "night";
 type PeriodPlan = WindowPlan & { id: PeriodId; score: number | null };
@@ -144,41 +139,8 @@ const OUTING_PERIODS: Array<{ id: PeriodId; start: number; end: number }> = [
 ];
 const PERIOD_TIE_PRIORITY: PeriodId[] = ["morning", "evening", "night", "noon"];
 const PERIOD_NAMES: Record<PeriodId, string> = { morning: "Morning", noon: "Midday", evening: "Evening", night: "Night" };
-
-const CHART_METRICS: Array<{ name: ComponentName; color: string; dash?: string }> = [
-  { name: "weather", color: "#8ed8ff" },
-  { name: "air", color: "#92efc8", dash: "7 4" },
-  { name: "temperature", color: "#ffd58a", dash: "2 3" },
-  { name: "uv", color: "#ffaaa0", dash: "10 3 2 3" },
-];
-
-const CHART_START_HOUR = 6;
-const CHART_END_HOUR = 22;
-const CHART_WIDTH = 640;
-const CHART_TOP = 8;
-const CHART_BOTTOM = 92;
-
-function chartX(hour: number): number {
-  return (hour - CHART_START_HOUR) / (CHART_END_HOUR - CHART_START_HOUR) * CHART_WIDTH;
-}
-
-function chartY(fit: number): number {
-  return CHART_BOTTOM - fit / 100 * (CHART_BOTTOM - CHART_TOP);
-}
-
-function metricPath(points: ChartPoint[], metric: ComponentName): string {
-  let drawing = false;
-  return points.map((point) => {
-    const fit = point.fits[metric];
-    if (fit === undefined) {
-      drawing = false;
-      return "";
-    }
-    const command = drawing ? "L" : "M";
-    drawing = true;
-    return `${command}${chartX(point.hour).toFixed(1)},${chartY(fit).toFixed(1)}`;
-  }).filter(Boolean).join(" ");
-}
+const PLANNING_START_HOUR = 6;
+const PLANNING_END_HOUR = 22;
 
 function nextSceneSequence(): number {
   try {
@@ -435,40 +397,15 @@ function excludedPeriodNote(period: PeriodPlan, profile: Profile, currentLocalHo
   return `${PERIOD_NAMES[period.id]} ranks lower because ${reason ? explanation[reason] : "the forecast is less complete"}.`;
 }
 
-function HourlyFitChart({ points, date, selectedHour, windows, onHourChange }: { points: ChartPoint[]; date: string; selectedHour: number; windows: Array<{ start: number; end: number }>; onHourChange: (hour: number) => void }) {
-  const selectedPoint = points.find((point) => point.hour === selectedHour);
-  const selectedTime = formatTime(`${date}T${String(selectedHour).padStart(2, "0")}:00`, { hour: "numeric" });
-  const selectedSummary = CHART_METRICS.map((metric) => `${METRIC_LABELS[metric.name]} ${selectedPoint?.fits[metric.name] === undefined ? "unavailable" : Math.round(selectedPoint.fits[metric.name] ?? 0)}`).join(", ");
-  const selectedX = chartX(selectedHour);
-  const highlightWindows = windows.map((window) => ({
-    start: Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, window.start)),
-    end: Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, window.end)),
-  })).filter((window) => window.end > window.start);
-
-  return <figure className="hourly-chart" aria-labelledby="hourly-chart-title">
-    <figcaption><span><strong id="hourly-chart-title">Through the day</strong><small>{windows.length ? `Higher is friendlier. Shaded areas are ${windows.length === 3 ? "the three selected" : "the selected"} ${windows.length === 1 ? "window" : "windows"}; drag to explore.` : "Higher is friendlier; drag to explore the whole day."}</small></span><strong>{selectedTime}</strong></figcaption>
-    <div className="hourly-chart__plot">
-      <svg viewBox={`0 0 ${CHART_WIDTH} 100`} preserveAspectRatio="none" aria-hidden="true">
-        <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={CHART_TOP} y2={CHART_TOP}/>
-        <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={(CHART_TOP + CHART_BOTTOM) / 2} y2={(CHART_TOP + CHART_BOTTOM) / 2}/>
-        <line className="hourly-chart__guide" x1="0" x2={CHART_WIDTH} y1={CHART_BOTTOM} y2={CHART_BOTTOM}/>
-        {highlightWindows.map((window) => <rect key={`${window.start}-${window.end}`} className="hourly-chart__window" x={chartX(window.start)} y="0" width={chartX(window.end) - chartX(window.start)} height="100" rx="8"/>)}
-        {CHART_METRICS.map((metric) => <path key={metric.name} className="hourly-chart__line" d={metricPath(points, metric.name)} stroke={metric.color} strokeDasharray={metric.dash}/>)}
-        <line className="hourly-chart__cursor" x1={selectedX} x2={selectedX} y1="0" y2="100"/>
-      </svg>
-      <input type="range" min={CHART_START_HOUR} max={CHART_END_HOUR} step="1" value={selectedHour} onChange={(event) => onHourChange(Number(event.target.value))} aria-label="Explore hourly conditions" aria-valuetext={`${selectedTime}. ${selectedSummary}`}/>
-    </div>
-    <div className="hourly-chart__axis" aria-hidden="true"><span>6a</span><span>10a</span><span>2p</span><span>6p</span><span>10p</span></div>
-    <div className="hourly-chart__legend">{CHART_METRICS.map((metric) => {
-      const fit = selectedPoint?.fits[metric.name];
-      return <span key={metric.name}><i aria-hidden="true" style={{ backgroundColor: metric.color }}/><span>{METRIC_LABELS[metric.name]}</span><strong>{fit === undefined ? "No data" : Math.round(fit)}</strong></span>;
-    })}</div>
-  </figure>;
-}
-
 function updateWithTransition(update: () => void): void {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !document.startViewTransition) update();
   else document.startViewTransition(update);
+}
+
+function closeDisclosure(details: HTMLDetailsElement | null): void {
+  if (!details) return;
+  details.open = false;
+  details.querySelector<HTMLElement>("summary")?.focus();
 }
 
 export function HaveAGreatDayApp() {
@@ -490,7 +427,6 @@ export function HaveAGreatDayApp() {
   const [hydrated, setHydrated] = useState(false);
   const [sceneSequence, setSceneSequence] = useState(0);
   const [failedSceneSrc, setFailedSceneSrc] = useState("");
-  const [chartHour, setChartHour] = useState(12);
   const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const methodDetails = useRef<HTMLDetailsElement | null>(null);
@@ -593,8 +529,7 @@ export function HaveAGreatDayApp() {
     const closeOnEscape = (event: KeyboardEvent) => {
       const details = [methodDetails.current, founderDetails.current].find((item) => item?.open);
       if (event.key !== "Escape" || !details?.open) return;
-      details.open = false;
-      details.querySelector("summary")?.focus();
+      closeDisclosure(details);
     };
     document.addEventListener("pointerdown", closeOnOutsidePress);
     document.addEventListener("keydown", closeOnEscape);
@@ -720,7 +655,7 @@ export function HaveAGreatDayApp() {
     return forecast.conditions.filter((condition) => {
       if (!condition.time.startsWith(`${activeDay.date}T`) || condition.time <= localHour || condition.isDay !== true) return false;
       const hour = Number(condition.time.slice(11, 13));
-      return hour >= CHART_START_HOUR && hour < CHART_END_HOUR;
+      return hour >= PLANNING_START_HOUR && hour < PLANNING_END_HOUR;
     });
   }, [activeDay, forecast, localHour]);
   const adaptiveDecision = useMemo(() => assessAdaptiveDay(planningHours, rankedPeriods.map((period) => ({ id: period.id, score: period.score, hours: selectedHours(period) })), profile), [planningHours, profile, rankedPeriods]);
@@ -794,39 +729,25 @@ export function HaveAGreatDayApp() {
   const recommendationScore = conversationVoice?.mode === "none" ? null : average(activeRatings.map((rating) => rating.score));
   const greatTimeFit = recommendationScore === null ? null : Math.max(0, Math.round(100 - recommendationScore));
   const rankingSummary = conversationVoice?.mode === "all_day"
-    ? `Conditions stay consistently favorable across the hours we checked for ${activeDayLabel}.`
+    ? `${activeDayLabel} stays comfortable across the daylight hours. These are the easiest times to plan around.`
     : conversationVoice?.mode === "none"
-      ? `The forecast does not leave a practical outdoor window in the hours we checked for ${activeDayLabel}.`
+      ? `${activeDayLabel} does not give us a practical set of daylight windows we can recommend with confidence.`
       : displayedPeriods.length
-        ? `${displayedPeriods.length === 1 ? "The strongest window" : `The ${displayedPeriods.length} worthwhile windows`} we found for ${activeDayLabel}.`
-        : "We compare each available window.";
+        ? `These are the ${displayedPeriods.length === 2 ? "two" : "three"} strongest daylight windows after comparing comfort, weather, air quality, and UV.`
+        : "We compare weather, air quality, UV, comfort, and daylight to find practical times outside.";
+  const methodTitle = !conversationVoice
+    ? "A simpler way to plan outside"
+    : conversationVoice.mode === "all_day"
+      ? "A flexible day outside"
+      : conversationVoice.mode === "none"
+        ? "Better saved for another day"
+        : "Why these times stand out";
+  const methodExplanation = conversationVoice?.mode === "none"
+    ? "We score every daylight hour, but the day does not leave enough consistently practical choices."
+    : "We score every daylight hour, then keep the two or three strongest windows so you have practical choices.";
+  const fitLabel = conversationVoice?.mode === "all_day" ? "Day fit" : "Time fit";
   const profileWeights = Object.entries(PROFILE_WEIGHTS[profile])
     .toSorted(([, first], [, second]) => second - first) as Array<[ComponentName, number]>;
-  const chartWindows = displayedPeriods.flatMap((period) => {
-    const hours = selectedHours(period);
-    const start = hours[0] ? Number(hours[0].time.slice(11, 13)) : null;
-    const end = hours.at(-1) ? Number(hours.at(-1)?.time.slice(11, 13)) + 1 : null;
-    return start === null || end === null ? [] : [{ start, end }];
-  });
-  const firstPlanningHour = planningHours[0] ? Number(planningHours[0].time.slice(11, 13)) : 12;
-  const firstWindowStart = chartWindows[0]?.start ?? firstPlanningHour;
-  const chartPoints = useMemo<ChartPoint[]>(() => {
-    if (!forecast || !activeDay) return [];
-    return forecast.conditions.flatMap((condition) => {
-      if (!condition.time.startsWith(`${activeDay.date}T`)) return [];
-      const hour = Number(condition.time.slice(11, 13));
-      if (hour < CHART_START_HOUR || hour > CHART_END_HOUR) return [];
-      const rating = rateHour(condition, profile);
-      const fits: ChartPoint["fits"] = {};
-      for (const name of Object.keys(rating.components) as ComponentName[]) fits[name] = 100 - (rating.components[name] ?? 100);
-      return [{ hour, fits }];
-    });
-  }, [activeDay, forecast, profile]);
-
-  useEffect(() => {
-    setChartHour(Math.max(CHART_START_HOUR, Math.min(CHART_END_HOUR, firstWindowStart)));
-  }, [activeDay?.date, firstWindowStart]);
-
   useEffect(() => {
     conversationController.current?.abort();
     if (!conversationInput || !conversationKey) return;
@@ -907,40 +828,41 @@ export function HaveAGreatDayApp() {
           </> : null}
         </div>
 
-        <div className="card-disclosures">
-          <details ref={methodDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && founderDetails.current?.open) founderDetails.current.open = false; }}>
-            <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
-            <div className="method-details__body">
-              {status.kind === "ready" && activeDay && activeHours.length ? <>
-                <header className="method-heading"><div><h2>{conversationVoice?.mode === "all_day" ? "Why the whole day works" : conversationVoice?.mode === "none" ? "Why another day is better" : "Why these times work"}</h2><p>{rankingSummary}</p></div>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>Average fit</span></div> : null}</header>
-                <dl className="method-facts">
-                  <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
-                  <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
-                  <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
-                  <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
-                </dl>
-                <HourlyFitChart points={chartPoints} date={activeDay.date} selectedHour={chartHour} windows={chartWindows} onHourChange={setChartHour}/>
-              </> : <p>We compare seven days of local weather, air quality, UV, and feels-like temperature, then find practical windows throughout each day.</p>}
-              <section className="method-breakdown" aria-labelledby="method-breakdown-title">
-                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{conversationVoice?.mode === "all_day" ? "We checked the full planning day and found that isolated windows would add clutter." : conversationVoice?.mode === "none" ? "We checked the full planning day and did not find a window that cleared the forecast guardrails." : "We compare four parts of the day, then keep only the windows with a worthwhile balance."} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">Data and sources</h3>}
-                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
-                <footer><span>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</span><span>Planning aid only</span><span className="method-footer-links"><a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a><Link href="/privacy">Privacy</Link></span></footer>
-              </section>
-            </div>
-          </details>
-
-          <details ref={founderDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && methodDetails.current?.open) methodDetails.current.open = false; }}>
-            <summary>Why I built this</summary>
-            <div className="method-details__body founder-note">
-              <h2>Why I built this</h2>
-              <div className="founder-note__story">
-                <p>Most weather apps give us plenty of hourly data, but still leave us to answer the real question: when is the right time to go outside?</p>
-                <p>I felt this every time I planned a park visit for my daughter. My mom would ask when to take her, and I would open the forecast, compare the temperature, sun, air quality, and conditions, then turn all those numbers into one recommendation.</p>
-                <p>Have a Great Day does that work for you. It brings weather, AQI, UV, comfort, and daylight together, then suggests practical times for a walk, park visit, hike, ride, or time outside with the people and pets you care about.</p>
-                <p>I do not want this to become another weather app full of features and data. The principle is simple: fewer numbers, more personal and useful guidance. I hope it helps you have a great day.</p>
+        <div className="card-footer">
+          <div className="card-disclosures">
+            <details ref={methodDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && founderDetails.current?.open) founderDetails.current.open = false; }}>
+              <summary>{status.kind === "ready" ? conversationVoice?.mode === "all_day" ? "Why this day?" : conversationVoice?.mode === "none" ? "Why another day?" : "Why these times?" : "How it works"}</summary>
+              <div className="method-details__body">
+                <header className="method-heading"><div><h2>{methodTitle}</h2><p>{rankingSummary}</p></div><div className="method-heading__aside"><button className="sheet-close" type="button" onClick={() => closeDisclosure(methodDetails.current)}>Close</button>{greatTimeFit !== null ? <div className="fit-score"><strong>{greatTimeFit}</strong><span>{fitLabel}</span></div> : null}</div></header>
+                {status.kind === "ready" && activeDay && activeHours.length ? <>
+                  <dl className="method-facts">
+                    <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd>{meanTemperature !== null ? <small>{tradeoffLabel(metricTradeoffs.temperature)}</small> : null}</div>
+                    <div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd>{maxRain !== null ? <small>{tradeoffLabel(metricTradeoffs.weather)}</small> : null}</div>
+                    <div><dt>Air</dt><dd>{meanAqi === null ? "No data" : formatValue(meanAqi, " AQI")}</dd>{meanAqi !== null ? <small>{tradeoffLabel(metricTradeoffs.air)}</small> : null}</div>
+                    <div><dt>UV</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd>{maxUv !== null ? <small>{tradeoffLabel(metricTradeoffs.uv)}</small> : null}</div>
+                  </dl>
+                </> : null}
+                <section className="method-breakdown" aria-labelledby="method-breakdown-title">
+                  {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-breakdown__intro"><h3 id="method-breakdown-title">How we decide</h3><p>{methodExplanation} {reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "The available forecast factors are well balanced."}</p></div> : <h3 id="method-breakdown-title">How we decide</h3>}
+                  {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-weights" aria-label="How much each forecast factor influences the result">{profileWeights.map(([name, weight]) => <span key={name}><strong>{METRIC_LABELS[name]}</strong> {Math.round(weight * 100)}%</span>)}</div> : null}
+                </section>
               </div>
-            </div>
-          </details>
+            </details>
+
+            <details ref={founderDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && methodDetails.current?.open) methodDetails.current.open = false; }}>
+              <summary>Why I built this</summary>
+              <div className="method-details__body founder-note">
+                <header className="founder-note__header"><h2>I wanted one clear answer</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
+                <div className="founder-note__story">
+                  <p>Weather apps show us plenty of data, but often leave one question unanswered: when should we actually go outside?</p>
+                  <p>I felt this whenever my mom asked when to take my daughter to the park. I would compare the hourly weather, temperature, sunlight, AQI, and UV, then turn all those numbers into one recommendation.</p>
+                  <p>Have a Great Day does that work for anyone planning a walk, ride, park visit, or time outside with someone they care about.</p>
+                  <p>Fewer numbers. A more useful answer. I hope it helps you have a great day.</p>
+                </div>
+              </div>
+            </details>
+          </div>
+          <p className="photo-credit">Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</p>
         </div>
       </section>
     </main>
