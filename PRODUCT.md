@@ -12,7 +12,7 @@ People quickly deciding when to walk, run or hike, cycle, walk a dog, or take ch
 
 ## Product purpose
 
-SafeDay compares the next seven days of local weather, air quality, UV, temperature, and daylight, then gives one practical outdoor window. It reduces forecast interpretation without claiming that any hour is universally safe.
+Have a Great Day compares the next seven days of local weather, air quality, UV, temperature, and daylight, then gives one practical outdoor window. It reduces forecast interpretation without claiming that any hour is universally safe.
 
 ## Primary workflow
 

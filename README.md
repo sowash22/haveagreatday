@@ -1,6 +1,6 @@
-# SafeDay
+# Have a Great Day
 
-SafeDay is a free, account-free website that compares weather, air quality, UV, and apparent temperature to find a more favorable two-hour window for outdoor activity.
+Have a Great Day is a free, account-free website that compares weather, air quality, UV, and apparent temperature to find a more favorable two-hour window for outdoor activity.
 
 It ranks relative forecast conditions. It does not declare an hour safe, provide medical advice, or replace official emergency guidance.
 

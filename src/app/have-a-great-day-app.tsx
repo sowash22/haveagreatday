@@ -6,11 +6,28 @@ import { fetchForecast, ProviderError, roundCoordinate, searchLocations, type Fo
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { recommendDays, type DayPlan, type HourConditions, type HourRating, type Profile, type TimePreference, type Units } from "../suitability";
 
-const ACTIVITY_KEY = "safeday-activity:v1";
-const PROFILE_KEY = "safeday-profile";
-const UNITS_KEY = "safeday-units";
-const LOCATION_KEY = "safeday-location";
-const LOCATION_HISTORY_KEY = "safeday-locations:v1";
+const ACTIVITY_KEY = "haveagreatday-activity:v1";
+const PROFILE_KEY = "haveagreatday-profile";
+const UNITS_KEY = "haveagreatday-units";
+const LOCATION_KEY = "haveagreatday-location";
+const LOCATION_HISTORY_KEY = "haveagreatday-locations:v1";
+
+function migrateStorage(): void {
+  const keys = [
+    ["safeday-activity:v1", ACTIVITY_KEY],
+    ["safeday-profile", PROFILE_KEY],
+    ["safeday-units", UNITS_KEY],
+    ["safeday-location", LOCATION_KEY],
+    ["safeday-locations:v1", LOCATION_HISTORY_KEY],
+  ] as const;
+  try {
+    for (const [legacy, current] of keys) {
+      const value = localStorage.getItem(legacy);
+      if (value !== null && localStorage.getItem(current) === null) localStorage.setItem(current, value);
+      localStorage.removeItem(legacy);
+    }
+  } catch { /* Existing settings remain available when storage access is allowed. */ }
+}
 
 type Status =
   | { kind: "idle" | "loading" | "ready" }
@@ -169,7 +186,7 @@ function updateWithTransition(update: () => void): void {
   else document.startViewTransition(update);
 }
 
-export function SafeDayApp() {
+export function HaveAGreatDayApp() {
   const [activity, setActivity] = useState<Activity>("walk");
   const [units, setUnits] = useState<Units>("metric");
   const [timePreference, setTimePreference] = useState<TimePreference>("any");
@@ -221,6 +238,7 @@ export function SafeDayApp() {
   }, []);
 
   useEffect(() => {
+    migrateStorage();
     const params = new URLSearchParams(window.location.search);
     const legacyProfile = readChoice<Profile>(PROFILE_KEY, ["general", "air", "temperature", "strenuous"], "general");
     const legacyActivity: Activity = legacyProfile === "strenuous" ? "run" : legacyProfile === "temperature" ? "family" : "walk";
@@ -373,7 +391,7 @@ export function SafeDayApp() {
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
-          <Link className="wordmark wordmark--card" href="/" aria-label="SafeDay home">SafeDay</Link>
+          <Link className="wordmark wordmark--card" href="/" aria-label="Have a Great Day home">Have a Great Day</Link>
           <button className="place-control" type="button" onClick={openPlaceDialog} aria-haspopup="dialog"><span>{location ? locationLabel(location) : "Choose a place"}</span><kbd>⌘K</kbd></button>
         </header>
 
@@ -383,7 +401,7 @@ export function SafeDayApp() {
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite">
-          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. SafeDay will compare the week and give you one clear window.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
+          {status.kind === "idle" ? <><h1 id="decision-title">Find your best time outside.</h1><p>Choose a place. We&apos;ll compare the week and give you one clear window.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
           {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Looking across the week.</h1><p>Balancing weather, air quality, UV, temperature, and daylight.</p></div> : null}
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
           {status.kind === "ready" && location && forecast && activeDay ? <>
@@ -393,14 +411,14 @@ export function SafeDayApp() {
         </div>
 
         <details className="method-details">
-          <summary>{status.kind === "ready" ? "How SafeDay chose this" : "How SafeDay works"}</summary>
+          <summary>{status.kind === "ready" ? "Why this time" : "How it works"}</summary>
           <div className="method-details__body">
             {status.kind === "ready" && activeDay && activeHours.length ? <>
               <dl className="method-facts"><div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd></div><div><dt>Rain</dt><dd>{formatValue(maxRain, "%")}</dd></div><div><dt>Air</dt><dd>{formatValue(meanAqi, " AQI")}</dd></div><div><dt>UV</dt><dd>{maxUv === null ? "Unavailable" : maxUv.toFixed(1)}</dd></div></dl>
               <p>{reasonSummary(activeRatings) ? `${reasonSummary(activeRatings)}.` : "This window has the lowest combined forecast tradeoffs."}</p>
               {warnings.length ? <p>{warnings.join(" ")}</p> : null}
-              <p>SafeDay ranks consecutive daylight hours from the next seven days. It is a planning aid, not a safety guarantee or medical advice.</p>
-            </> : <p>SafeDay compares seven days of local weather, air quality, UV, feels-like temperature, and daylight, then picks the lowest-tradeoff outdoor window.</p>}
+              <p>We rank consecutive daylight hours from the next seven days. This is a planning aid, not a safety guarantee or medical advice.</p>
+            </> : <p>We compare seven days of local weather, air quality, UV, feels-like temperature, and daylight, then pick the lowest-tradeoff outdoor window.</p>}
             <footer>Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash <span aria-hidden="true">·</span> <a href="https://open-meteo.com/" rel="noreferrer">Forecast data</a> <span aria-hidden="true">·</span> <Link href="/privacy">Privacy</Link></footer>
           </div>
         </details>

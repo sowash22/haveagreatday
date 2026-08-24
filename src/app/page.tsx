@@ -1,5 +1,5 @@
-import { SafeDayApp } from "./safe-day-app";
+import { HaveAGreatDayApp } from "./have-a-great-day-app";
 
 export default function HomePage() {
-  return <SafeDayApp />;
+  return <HaveAGreatDayApp />;
 }

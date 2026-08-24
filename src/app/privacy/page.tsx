@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "How SafeDay handles city searches, rounded coordinates, local preferences, and shared links.",
+  description: "How Have a Great Day handles city searches, rounded coordinates, local preferences, and shared links.",
 };
 
 export default function PrivacyPage() {
@@ -12,14 +12,14 @@ export default function PrivacyPage() {
       <a className="skip-link" href="#main">Skip to privacy details</a>
       <header className="app-bar-shell">
         <nav className="app-bar app-bar--simple page-shell" aria-label="Primary navigation">
-          <Link className="wordmark" href="/">SafeDay</Link>
+          <Link className="wordmark" href="/">Have a Great Day</Link>
           <Link className="quiet-link" href="/">Planner</Link>
         </nav>
       </header>
       <main id="main" className="page-shell privacy-page">
         <header>
           <h1>Privacy, in plain language.</h1>
-          <p>SafeDay works without an account, advertising, analytics, or a database.</p>
+          <p>Have a Great Day works without an account, advertising, analytics, or a database.</p>
         </header>
         <section>
           <h2>What leaves your browser</h2>
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
           <p>Open-Meteo receives requests under its own terms and privacy practices. Read <a href="https://open-meteo.com/en/terms" rel="noreferrer">Open-Meteo’s terms</a> before using the service for a sensitive purpose.</p>
         </section>
       </main>
-      <footer className="statement-footer"><div className="page-shell"><p className="statement-footer__line">More good hours outside. Less guessing.</p><div className="statement-footer__meta"><span>SafeDay</span><nav aria-label="Footer navigation"><Link href="/">Planner</Link></nav></div></div></footer>
+      <footer className="statement-footer"><div className="page-shell"><p className="statement-footer__line">More good hours outside. Less guessing.</p><div className="statement-footer__meta"><span>Have a Great Day</span><nav aria-label="Footer navigation"><Link href="/">Planner</Link></nav></div></div></footer>
     </>
   );
 }

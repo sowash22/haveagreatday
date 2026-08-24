@@ -11,12 +11,12 @@ const bodyFont = Geist({
 
 export const metadata: Metadata = {
   title: {
-    default: "SafeDay: Plan a better time outside",
-    template: "%s: SafeDay",
+    default: "Have a Great Day: Find a better time outside",
+    template: "%s | Have a Great Day",
   },
   description: "Compare the next seven days to plan a walk, run, ride, dog walk, or park visit around weather, air quality, UV, and temperature.",
   other: {
-    "impeccable-contract": "seed=f9dbe9d4; direction=canon-weather; mode=operate; variance=6; motion=3; density=3; brief=.impeccable/surfaces/src-app-safe-day-app-tsx.md",
+    "impeccable-contract": "seed=f9dbe9d4; direction=canon-weather; mode=operate; variance=6; motion=3; density=3; brief=.impeccable/surfaces/src-app-have-a-great-day-app-tsx.md",
   },
 };
 

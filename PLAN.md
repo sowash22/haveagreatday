@@ -1,4 +1,4 @@
-# SafeDay Implementation Plan
+# Have a Great Day Implementation Plan
 
 This plan implements the MVP defined in [PRD.md](./PRD.md). It intentionally stops at a static, account-free application.
 
@@ -29,7 +29,7 @@ If a direct API request becomes unreliable because of CORS or rate limits, add o
 │   ├── app/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
-│   │   ├── safe-day-app.tsx
+│   │   ├── have-a-great-day-app.tsx
 │   │   └── privacy/page.tsx
 │   ├── openMeteo.ts
 │   ├── suitability.ts

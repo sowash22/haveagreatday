@@ -1,13 +1,13 @@
 ---
-name: SafeDay
+name: Have a Great Day
 description: A cinematic, one-answer outdoor planner.
 ---
 
-# Design System: SafeDay
+# Design System: Have a Great Day
 
 ## Creative north star
 
-**A window into your next hour outside.** SafeDay is one immersive decision card, not a weather dashboard. A real outdoor photograph makes the forecast feel tangible while a strong scrim keeps the recommendation calm and legible.
+**A window into your next hour outside.** Have a Great Day is one immersive decision card, not a weather dashboard. A real outdoor photograph makes the forecast feel tangible while a strong scrim keeps the recommendation calm and legible.
 
 ## Hierarchy
 

@@ -1,5 +1,5 @@
 {
-  "title": "Choose SafeDay's new visual world",
+  "title": "Choose Have a Great Day's new visual world",
   "question": "Each direction removes the dashboard feel. Choose the world that should make planning outside feel immediate and human.",
   "options": [
     {
@@ -25,7 +25,7 @@
       "label": "The Trail Marker",
       "kicker": "IMPECCABLE'S PICK",
       "lineage": "trailhead signs and greenway wayfinding",
-      "thesis": "SafeDay acts like one clear marker at the start of an outing: go here, at this time, for this reason.",
+      "thesis": "Have a Great Day acts like one clear marker at the start of an outing: go here, at this time, for this reason.",
       "palette": ["#f1f2ea", "#17211b", "#34734d"],
       "materials": ["matte enamel", "painted route line"],
       "viewport": "One route-like recommendation cuts through the screen, with the week folded into a compact trail legend below it.",
@@ -101,7 +101,7 @@
       "viewport": "A command wall frames the next window with alerts at the edges.",
       "case": "It communicates state strongly, but turns ordinary planning into an emergency.",
       "kept": "State changes should be spatially obvious.",
-      "risk": "The alarm language conflicts with SafeDay's calm honesty.",
+      "risk": "The alarm language conflicts with Have a Great Day's calm honesty.",
       "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-anime-command-center-hero.webp"
     },
     {

@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "src-app-safe-day-app-tsx"
-primary_target: "src/app/safe-day-app.tsx"
+slug: "src-app-have-a-great-day-app-tsx"
+primary_target: "src/app/have-a-great-day-app.tsx"
 related_targets: ["src/styles.css", "tokens.css"]
 ---
 

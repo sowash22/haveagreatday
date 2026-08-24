@@ -1,4 +1,4 @@
-# SafeDay Product Requirements Document
+# Have a Great Day Product Requirements Document
 
 Status: MVP specification  
 Audience: product, design, engineering, and contributors  
@@ -6,9 +6,9 @@ Last updated: 2026-08-23
 
 ## 1. Summary
 
-SafeDay is a free, privacy-respecting website that helps people find the most favorable upcoming window for outdoor activity using weather, air-quality, and UV forecasts.
+Have a Great Day is a free, privacy-respecting website that helps people find the most favorable upcoming window for outdoor activity using weather, air-quality, and UV forecasts.
 
-SafeDay does **not** declare conditions safe, provide medical advice, or replace official emergency guidance. It ranks relative outdoor suitability, shows the measurements behind the ranking, and links to the data sources.
+Have a Great Day does **not** declare conditions safe, provide medical advice, or replace official emergency guidance. It ranks relative outdoor suitability, shows the measurements behind the ranking, and links to the data sources.
 
 The MVP is a static client-side website with no accounts, application database, advertising, analytics, or paid AI dependency.
 
@@ -51,7 +51,7 @@ Wants to walk, garden, commute, or spend time outside when conditions are relati
 
 ### Air-quality-sensitive user
 
-Wants AQI to have more influence on the ranking. SafeDay does not ask for a diagnosis.
+Wants AQI to have more influence on the ranking. Have a Great Day does not ask for a diagnosis.
 
 ### Temperature-sensitive user
 
@@ -73,11 +73,11 @@ Plans running, cycling, field sports, or physical work and wants heat and air qu
 
 ## 7. Core user journey
 
-1. The user opens SafeDay.
+1. The user opens Have a Great Day.
 2. The user searches for a city or explicitly permits approximate device location.
-3. SafeDay rounds coordinates to two decimal places before requesting forecasts.
+3. Have a Great Day rounds coordinates to two decimal places before requesting forecasts.
 4. The user selects one profile: General, Air quality, Temperature, or Strenuous activity.
-5. SafeDay displays:
+5. Have a Great Day displays:
    - the recommended two-hour window;
    - the two most important reasons;
    - a 24-hour suitability timeline;
@@ -198,11 +198,11 @@ Source: [AirNow AQI Basics](https://www.airnow.gov/aqi/aqi-basics/).
 | 8–10 | Very high | 80 |
 | 11+ | Extreme | 100 |
 
-Source: [U.S. EPA UV Index Scale](https://www.epa.gov/sunsafety/uv-index-scale-0). SafeDay may use finer bands for ranking while preserving EPA-facing labels.
+Source: [U.S. EPA UV Index Scale](https://www.epa.gov/sunsafety/uv-index-scale-0). Have a Great Day may use finer bands for ranking while preserving EPA-facing labels.
 
 #### Apparent-temperature penalty
 
-These bands are SafeDay ranking heuristics, not health guidance:
+These bands are Have a Great Day ranking heuristics, not health guidance:
 
 | Apparent temperature | Penalty |
 |---|---:|
@@ -269,7 +269,7 @@ Official alerts must be displayed separately and must not be folded into an opaq
 
 ## 11. Safety and content requirements
 
-- Persistent disclaimer: “SafeDay compares forecast conditions. It is not medical advice or an emergency warning service.”
+- Persistent disclaimer: “Have a Great Day compares forecast conditions. It is not medical advice or an emergency warning service.”
 - Link to official provider details for AQI and UV categories.
 - Never say “You should go outside,” “safe,” “risk-free,” or “danger-free.”
 - Never infer a diagnosis from profile selection.
@@ -324,7 +324,7 @@ The MVP is ready when:
 
 ## 16. Public-good success definition
 
-SafeDay succeeds if it is trustworthy, forkable, and useful without collecting user data. Initial evidence should come from GitHub issues, community feedback, accessibility review, and documented deployments—not invasive analytics.
+Have a Great Day succeeds if it is trustworthy, forkable, and useful without collecting user data. Initial evidence should come from GitHub issues, community feedback, accessibility review, and documented deployments—not invasive analytics.
 
 ## 17. Later opportunities
 
