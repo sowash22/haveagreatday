@@ -1,15 +1,16 @@
 "use client";
 
-import Image from "next/image";
+import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
+import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { PROFILE_WEIGHTS, rateHour, recommend, recommendDays, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
 const PROFILE_KEY = "haveagreatday-profile";
 const UNITS_KEY = "haveagreatday-units";
+const UNITS_OVERRIDE_KEY = "haveagreatday-units-override:v1";
 const LOCATION_KEY = "haveagreatday-location";
 const LOCATION_HISTORY_KEY = "haveagreatday-locations:v1";
 const SCENE_ROTATION_KEY = "haveagreatday-scene:v1";
@@ -37,6 +38,29 @@ type Status =
 
 type Scene = { src: string; photographer: string; href: string; position?: string };
 
+const UNSPLASH_VIEW_ID = "M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA==";
+
+function unsplashScene(imageId: string, photographer: string, photoId: string, position?: string): Scene {
+  const url = new URL(`https://images.unsplash.com/${imageId}`);
+  url.search = new URLSearchParams({ auto: "format", fit: "crop", fm: "jpg", ixid: UNSPLASH_VIEW_ID, ixlib: "rb-4.1.0", q: "75", w: "2400" }).toString();
+  return { src: url.toString(), photographer, href: `https://unsplash.com/photos/${photoId}`, position };
+}
+
+function isUnsplashScene(src: string): boolean {
+  return src.startsWith("https://images.unsplash.com/");
+}
+
+function unsplashImageUrl(src: string, width: number, quality = 75): string {
+  const url = new URL(src);
+  url.searchParams.set("w", String(width));
+  url.searchParams.set("q", String(quality));
+  return url.toString();
+}
+
+function unsplashImageLoader({ src, width, quality }: ImageLoaderProps): string {
+  return unsplashImageUrl(src, width, quality ?? 75);
+}
+
 const BASE_SCENES: Record<SceneKey, Scene> = {
   walk: { src: "/scene-walk.jpg", photographer: "Annie Spratt", href: "https://unsplash.com/photos/MkQmva8z5oI" },
   run: { src: "/scene-run.jpg", photographer: "Phil Aicken", href: "https://unsplash.com/photos/JsSw0qpikmQ" },
@@ -50,7 +74,14 @@ const BASE_SCENES: Record<SceneKey, Scene> = {
 
 const CLEAR_SUNPATH: Scene = { src: "/scene-clear-sunpath.jpg", photographer: "Tunahan Kuzgun", href: "https://unsplash.com/photos/u2bL7sIdA1E", position: "center 56%" };
 const CLEAR_DOGWALK: Scene = { src: "/scene-clear-dogwalk.jpg", photographer: "Brooke Balentine", href: "https://unsplash.com/photos/3mu-RJ7-TXc", position: "center 58%" };
-const CLEAR_SCENES: readonly Scene[] = [CLEAR_SUNPATH, CLEAR_DOGWALK];
+const CLEAR_SCENES: readonly Scene[] = [
+  CLEAR_SUNPATH,
+  CLEAR_DOGWALK,
+  unsplashScene("photo-1782005863367-694fd380d705", "Bhargav Panchal", "qSnrNfcDPQ8", "center 52%"),
+  unsplashScene("photo-1771767435868-e3141980fcb1", "Sang Kwak", "hdhG-bof6e0", "center 55%"),
+  unsplashScene("photo-1780540771752-b4435e425e53", "eldhose kuriyan", "or4xDwcxtAs", "center 52%"),
+  unsplashScene("photo-1770563182950-7ce423af5116", "Timur Shakerzianov", "inGSMcT-i70", "center 55%"),
+];
 
 const SCENE_POOLS: Record<SceneKey, readonly Scene[]> = {
   walk: [BASE_SCENES.walk, ...CLEAR_SCENES],
@@ -62,16 +93,28 @@ const SCENE_POOLS: Record<SceneKey, readonly Scene[]> = {
     BASE_SCENES.cloudy,
     { src: "/scene-cloudy-autumn.jpg", photographer: "Gennady Zakharin", href: "https://unsplash.com/photos/O2CVeC8zyFs", position: "center 54%" },
     { src: "/scene-cloudy-fog.jpg", photographer: "Nadiia Shuran", href: "https://unsplash.com/photos/N5LcYyNomKc", position: "center 58%" },
+    unsplashScene("photo-1741177364548-a430f08ba0e3", "Tuan Nguyen", "jGfq2nOrgBA", "center 54%"),
+    unsplashScene("photo-1742993065579-5e0325856322", "Anurag Sarkar", "-LozHaO9Eac", "center 56%"),
+    unsplashScene("photo-1775716021167-e8133881470a", "Alexander Lunyov", "KGv2NvNfLa8", "center 52%"),
+    unsplashScene("photo-1768410984104-bf3834fc0fb4", "Dewang Gupta", "iH0ejMO5wzE", "center 56%"),
   ],
   rain: [
     BASE_SCENES.rain,
     { src: "/scene-rain-dogwalk.jpg", photographer: "Martin Koloski", href: "https://unsplash.com/photos/VXfz0gnHIRg", position: "center 54%" },
     { src: "/scene-rain-umbrellas.jpg", photographer: "Kouji Tsuru", href: "https://unsplash.com/photos/dxi_FQzoGBo", position: "center 48%" },
+    unsplashScene("photo-1777530708108-aff3b36b68fb", "Aysegul Aytören", "YvfGbhc286Q", "center 52%"),
+    unsplashScene("photo-1767556177573-3882bb872b75", "Tkhao Khoang", "RAkfGC4JgRI", "center 55%"),
+    unsplashScene("photo-1663531340061-6b9537f38566", "Charlie Devinett-Jones", "wN40qLWQtiI", "center 52%"),
+    unsplashScene("photo-1680278278096-dab420e28141", "Nathan Franklin", "WIDrs1BZzPI", "center 55%"),
   ],
   snow: [
     BASE_SCENES.snow,
     { src: "/scene-snow-forest.jpg", photographer: "Sandra", href: "https://unsplash.com/photos/tRGcPlYH_cI", position: "center 58%" },
     { src: "/scene-snow-path.jpg", photographer: "stenedit", href: "https://unsplash.com/photos/vlDO_Q821UQ", position: "center 60%" },
+    unsplashScene("photo-1768148253833-8154fe21ae80", "Maria Rodideal", "7IzHFilk-aI", "center 56%"),
+    unsplashScene("photo-1758930908635-ba29de1281de", "Sebastian Schuster", "P_18HS7_aIM", "center 54%"),
+    unsplashScene("photo-1767721989746-3bc7cc50904c", "odalv", "nkfj_npUo4s", "center 56%"),
+    unsplashScene("photo-1766076079286-2abee2e7e4ef", "Brett Jordan", "nBv-jqez538", "center 58%"),
   ],
 };
 
@@ -89,15 +132,16 @@ type ChartPoint = {
 
 type WindowPlan = { conditions: HourConditions[]; recommendation: Recommendation };
 type PeriodId = "morning" | "noon" | "evening" | "night";
-type PeriodPlan = WindowPlan & { id: PeriodId; label: string; score: number | null };
+type PeriodPlan = WindowPlan & { id: PeriodId; score: number | null };
 
-const OUTING_PERIODS: Array<{ id: PeriodId; label: string; start: number; end: number }> = [
-  { id: "morning", label: "Morning", start: 6, end: 11 },
-  { id: "noon", label: "Noon", start: 11, end: 15 },
-  { id: "evening", label: "Evening", start: 15, end: 20 },
-  { id: "night", label: "Night", start: 20, end: 22 },
+const OUTING_PERIODS: Array<{ id: PeriodId; start: number; end: number }> = [
+  { id: "morning", start: 6, end: 11 },
+  { id: "noon", start: 11, end: 15 },
+  { id: "evening", start: 15, end: 20 },
+  { id: "night", start: 20, end: 22 },
 ];
 const PERIOD_TIE_PRIORITY: PeriodId[] = ["morning", "evening", "night", "noon"];
+const WINDOW_RANK_LABELS = ["Best", "Next best", "Third best"] as const;
 
 const CHART_METRICS: Array<{ name: ComponentName; color: string; dash?: string }> = [
   { name: "weather", color: "#8ed8ff" },
@@ -167,6 +211,7 @@ function parseLocation(value: unknown): LocationChoice | null {
     name: typeof item.name === "string" && item.name ? item.name : "Saved approximate location",
     region: typeof item.region === "string" ? item.region : "",
     country: typeof item.country === "string" ? item.country : "",
+    countryCode: typeof item.countryCode === "string" && /^[a-z]{2}$/i.test(item.countryCode) ? item.countryCode.toUpperCase() : undefined,
     latitude: roundCoordinate(item.latitude),
     longitude: roundCoordinate(item.longitude),
   };
@@ -183,7 +228,7 @@ function readSavedLocations(): LocationChoice[] {
 
 function saveLocation(location: LocationChoice): LocationChoice[] {
   try {
-    const minimal = { name: location.name, region: location.region, country: location.country, latitude: location.latitude, longitude: location.longitude };
+    const minimal = { name: location.name, region: location.region, country: location.country, countryCode: location.countryCode, latitude: location.latitude, longitude: location.longitude };
     const history = [minimal, ...readSavedLocations().filter((item) => item.latitude !== location.latitude || item.longitude !== location.longitude)].slice(0, 5);
     localStorage.setItem(LOCATION_KEY, JSON.stringify(minimal));
     localStorage.setItem(LOCATION_HISTORY_KEY, JSON.stringify(history));
@@ -208,6 +253,7 @@ function sharedLocation(params: URLSearchParams): LocationChoice | null {
     name: params.get("place")?.slice(0, 120) || "Shared approximate location",
     region: params.get("region")?.slice(0, 120) || "",
     country: params.get("country")?.slice(0, 120) || "",
+    countryCode: params.get("countryCode")?.slice(0, 2) || undefined,
     latitude: Number(params.get("lat")),
     longitude: Number(params.get("lon")),
   });
@@ -301,7 +347,7 @@ function periodPlans(conditions: HourConditions[], date: string, profile: Profil
     const recommendation = recommend(periodConditions, profile, currentLocalHour, { daylightOnly: false });
     const ratings = recommendation.hours.flatMap((index) => recommendation.ratings[index] ? [recommendation.ratings[index]] : []);
     const score = ratings.length ? Math.round(ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length) : null;
-    return { id: period.id, label: period.label, conditions: periodConditions, recommendation, score };
+    return { id: period.id, conditions: periodConditions, recommendation, score };
   });
 }
 
@@ -398,12 +444,14 @@ export function HaveAGreatDayApp() {
   const [forgotten, setForgotten] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [sceneSequence, setSceneSequence] = useState(0);
+  const [failedSceneSrc, setFailedSceneSrc] = useState("");
   const [chartHour, setChartHour] = useState(12);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const methodDetails = useRef<HTMLDetailsElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
+  const unitsOverridden = useRef(false);
   const profile = ACTIVITIES[activity].profile;
 
   const advanceScene = useCallback(() => {
@@ -417,6 +465,7 @@ export function HaveAGreatDayApp() {
 
   const loadLocation = useCallback(async (choice: LocationChoice, date = "") => {
     const rounded = { ...choice, latitude: roundCoordinate(choice.latitude), longitude: roundCoordinate(choice.longitude) };
+    if (!unitsOverridden.current) setUnits(customaryUnitsForLocation(rounded, navigator.language));
     setLocation(rounded);
     setForecast(null);
     setSelectedDate(date);
@@ -446,19 +495,28 @@ export function HaveAGreatDayApp() {
     const legacyActivity: Activity = legacyProfile === "strenuous" ? "run" : legacyProfile === "temperature" ? "family" : "walk";
     const requestedActivity = params.get("activity");
     const initialActivity = requestedActivity && Object.hasOwn(ACTIVITIES, requestedActivity) ? requestedActivity as Activity : readChoice<Activity>(ACTIVITY_KEY, Object.keys(ACTIVITIES) as Activity[], legacyActivity);
-    const initialUnits = params.get("units") === "imperial" ? "imperial" : readChoice<Units>(UNITS_KEY, ["metric", "imperial"], "metric");
     const requestedTime = params.get("time");
     const initialTime = requestedTime && Object.hasOwn(TIME_OPTIONS, requestedTime) ? requestedTime as TimePreference : "any";
     const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") ?? "") ? params.get("date") ?? "" : "";
     const history = readSavedLocations();
+    const initialLocation = sharedLocation(params) ?? readSavedLocation() ?? history[0] ?? null;
+    const requestedUnits = params.get("units");
+    const urlUnits = requestedUnits === "metric" || requestedUnits === "imperial" ? requestedUnits : null;
+    const urlOverridesUnits = urlUnits !== null && params.get("unitMode") !== "auto";
+    let savedUnitsOverride = false;
+    try { savedUnitsOverride = localStorage.getItem(UNITS_OVERRIDE_KEY) === "true"; } catch { /* Automatic units remain available. */ }
+    unitsOverridden.current = urlOverridesUnits || savedUnitsOverride;
+    const initialUnits = urlOverridesUnits
+      ? urlUnits
+      : savedUnitsOverride
+        ? readChoice<Units>(UNITS_KEY, ["metric", "imperial"], "metric")
+        : customaryUnitsForLocation(initialLocation, navigator.language);
     setActivity(initialActivity);
     setUnits(initialUnits);
     setTimePreference(initialTime);
     setSavedLocations(history);
     savePreference(ACTIVITY_KEY, initialActivity);
     savePreference(PROFILE_KEY, ACTIVITIES[initialActivity].profile);
-    savePreference(UNITS_KEY, initialUnits);
-    const initialLocation = sharedLocation(params) ?? readSavedLocation() ?? history[0] ?? null;
     if (initialLocation) void loadLocation(initialLocation, initialDate);
     setHydrated(true);
 
@@ -501,6 +559,7 @@ export function HaveAGreatDayApp() {
     url.searchParams.set("activity", activity);
     url.searchParams.set("time", timePreference);
     url.searchParams.set("units", units);
+    url.searchParams.set("unitMode", unitsOverridden.current ? "override" : "auto");
     if (selectedDate) url.searchParams.set("date", selectedDate); else url.searchParams.delete("date");
     url.searchParams.delete("period");
     if (location) {
@@ -509,8 +568,9 @@ export function HaveAGreatDayApp() {
       url.searchParams.set("place", location.name);
       if (location.region) url.searchParams.set("region", location.region); else url.searchParams.delete("region");
       if (location.country) url.searchParams.set("country", location.country); else url.searchParams.delete("country");
+      if (location.countryCode) url.searchParams.set("countryCode", location.countryCode); else url.searchParams.delete("countryCode");
     } else {
-      for (const key of ["lat", "lon", "place", "region", "country"]) url.searchParams.delete(key);
+      for (const key of ["lat", "lon", "place", "region", "country", "countryCode"]) url.searchParams.delete(key);
     }
     window.history.replaceState(null, "", url);
   }, [activity, hydrated, location, selectedDate, timePreference, units]);
@@ -578,8 +638,10 @@ export function HaveAGreatDayApp() {
 
   function toggleUnits() {
     const nextUnits: Units = units === "metric" ? "imperial" : "metric";
+    unitsOverridden.current = true;
     setUnits(nextUnits);
     savePreference(UNITS_KEY, nextUnits);
+    savePreference(UNITS_OVERRIDE_KEY, "true");
   }
 
   function forgetLocation() {
@@ -602,8 +664,7 @@ export function HaveAGreatDayApp() {
   const recommendedPeriods = useMemo(() => activePeriods
     .filter((period) => period.score !== null)
     .toSorted((first, second) => (first.score ?? 100) - (second.score ?? 100) || PERIOD_TIE_PRIORITY.indexOf(first.id) - PERIOD_TIE_PRIORITY.indexOf(second.id))
-    .slice(0, 3)
-    .toSorted((first, second) => OUTING_PERIODS.findIndex((period) => period.id === first.id) - OUTING_PERIODS.findIndex((period) => period.id === second.id)), [activePeriods]);
+    .slice(0, 3), [activePeriods]);
   const activeRatings = recommendedPeriods.flatMap((period) => selectedRatings(period));
   const activeHours = recommendedPeriods.flatMap((period) => selectedHours(period));
   const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
@@ -624,7 +685,8 @@ export function HaveAGreatDayApp() {
   const sceneKey = weatherScene(activity, representativeWeather);
   const scenePool = SCENE_POOLS[sceneKey];
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
-  const scene = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
+  const sceneCandidate = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
+  const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
   const recommendationScore = average(recommendedPeriods.map((period) => period.score));
   const greatTimeFit = recommendationScore === null ? null : Math.max(0, Math.round(100 - recommendationScore));
   const rankingSummary = activeDay && recommendedPeriods.length
@@ -660,18 +722,23 @@ export function HaveAGreatDayApp() {
     const nextScene = scenePool[(sceneIndex + 1) % scenePool.length];
     if (!nextScene || nextScene.src === scene.src) return;
     const image = new window.Image();
-    const source = encodeURIComponent(nextScene.src);
     const widths = [640, 828, 1200, 1920];
-    image.srcset = widths.map((width) => `/_next/image?url=${source}&w=${width}&q=75 ${width}w`).join(", ");
+    if (isUnsplashScene(nextScene.src)) {
+      image.srcset = widths.map((width) => `${unsplashImageUrl(nextScene.src, width)} ${width}w`).join(", ");
+      image.src = unsplashImageUrl(nextScene.src, 1200);
+    } else {
+      const source = encodeURIComponent(nextScene.src);
+      image.srcset = widths.map((width) => `/_next/image?url=${source}&w=${width}&q=75 ${width}w`).join(", ");
+      image.src = `/_next/image?url=${source}&w=1200&q=75`;
+    }
     image.sizes = "(max-width: 1248px) 100vw, 1216px";
-    image.src = `/_next/image?url=${source}&w=1200&q=75`;
   }, [scene.src, sceneIndex, scenePool]);
 
   return <div className="experience-root">
     <a className="skip-link" href="#main">Skip to planner</a>
     <main id="main" className="single-screen">
       <section className="decision-card" data-scene={sceneKey} aria-labelledby="decision-title">
-        <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" style={scene.position ? { objectPosition: scene.position } : undefined}/>
+        <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" loader={isUnsplashScene(scene.src) ? unsplashImageLoader : undefined} onError={isUnsplashScene(scene.src) ? () => setFailedSceneSrc(scene.src) : undefined} style={scene.position ? { objectPosition: scene.position } : undefined}/>
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
@@ -694,10 +761,10 @@ export function HaveAGreatDayApp() {
           {status.kind === "ready" && location && forecast && activeDay ? <>
             <h1 id="decision-title" className="visually-hidden">Outdoor times for {dayName(activeDay.date)}</h1>
             <p className="decision-context">{recommendedPeriods.length ? <>{location.name} looks good for some time outside. {recommendedPeriods.length === 3 ? "These are the three strongest windows" : "These are the best windows still available"} after balancing weather, air quality, UV, and comfort.</> : <>No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</>}</p>
-            {recommendedPeriods.length ? <div className="day-windows" data-count={recommendedPeriods.length} role="list" aria-label={`Best times for ${dayName(activeDay.date)}`}>{recommendedPeriods.map((period) => {
+            {recommendedPeriods.length ? <div className="day-windows" data-count={recommendedPeriods.length} role="list" aria-label={`Ranked outdoor times for ${dayName(activeDay.date)}`}>{recommendedPeriods.map((period, index) => {
               const evidence = periodEvidence(period, units);
               return <div role="listitem" key={period.id}>
-                <span>{period.label}</span>
+                <span>{WINDOW_RANK_LABELS[index] ?? "Alternative"}</span>
                 <strong>{compactWindowLabel(period)}</strong>
                 <small className="window-condition">{evidence.condition} · {lightLabel(period)}</small>
                 <small className="window-metrics">{evidence.temperature} · {evidence.aqi} · {evidence.uv}</small>
@@ -735,7 +802,7 @@ export function HaveAGreatDayApp() {
       <form className="location-form" onSubmit={handleSearch} noValidate><label htmlFor="city">Search for a city or town</label><div className="input-row"><input ref={searchInput} id="city" name="city" type="search" autoComplete="address-level2" enterKeyHint="search" placeholder="Try Pasadena or Portland" aria-describedby="city-help" aria-invalid={searchError || undefined} value={query} onChange={(event) => { setQuery(event.target.value); if (searchError) setSearchError(false); }} required/><button className="button" type="submit" disabled={searching} aria-busy={searching}>{searching ? "Searching..." : "Search"}</button></div><p id="city-help" className={`field-help${searchError ? " field-help--error" : ""}`} role={searchError ? "alert" : undefined}>{searchMessage}</p></form>
       <button className="button button--soft" type="button" onClick={useApproximateLocation} disabled={locating} aria-busy={locating}>{locating ? "Finding you..." : "Use my location"}</button>
       <div className="search-results" aria-live="polite">{searchResults.length > 0 ? <ul>{searchResults.map((result) => <li key={`${result.latitude}-${result.longitude}`}><button type="button" onClick={() => chooseLocation(result)}><span>{result.name}</span><small>{[result.region, result.country].filter(Boolean).join(", ")}</small></button></li>)}</ul> : null}</div>
-      <div className="privacy-note"><p>No account or analytics. Only rounded coordinates leave this device.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
+      <div className="privacy-note"><p>No account or first-party analytics. Forecasts use Open-Meteo; photos use Unsplash.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
     </div></dialog>
   </div>;
 }

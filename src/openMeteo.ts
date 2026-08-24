@@ -1,12 +1,29 @@
-import type { HourConditions } from "./suitability.ts";
+import type { HourConditions, Units } from "./suitability.ts";
 
 export type LocationChoice = {
   name: string;
   region: string;
   country: string;
+  countryCode?: string;
   latitude: number;
   longitude: number;
 };
+
+const FAHRENHEIT_WEATHER_REGIONS = new Set(["BS", "BZ", "KY", "PR", "PW", "US"]);
+const FAHRENHEIT_COUNTRIES = new Set(["bahamas", "belize", "cayman islands", "palau", "puerto rico", "united states", "united states of america"]);
+
+export function customaryUnitsForLocation(location: Pick<LocationChoice, "country" | "countryCode"> | null, locale = ""): Units {
+  const countryCode = location?.countryCode?.trim().toUpperCase();
+  if (countryCode) return FAHRENHEIT_WEATHER_REGIONS.has(countryCode) ? "imperial" : "metric";
+  const country = location?.country.trim().toLowerCase();
+  if (country) return FAHRENHEIT_COUNTRIES.has(country) ? "imperial" : "metric";
+  try {
+    const localeRegion = locale ? new Intl.Locale(locale).region : undefined;
+    return localeRegion && FAHRENHEIT_WEATHER_REGIONS.has(localeRegion) ? "imperial" : "metric";
+  } catch {
+    return "metric";
+  }
+}
 
 export type ForecastResult = {
   conditions: HourConditions[];
@@ -146,6 +163,7 @@ export async function searchLocations(query: string, signal?: AbortSignal): Prom
         name: stringValue(result.name, "Location name"),
         region: typeof result.admin1 === "string" ? result.admin1 : "",
         country: typeof result.country === "string" ? result.country : "",
+        countryCode: typeof result.country_code === "string" ? result.country_code.toUpperCase() : undefined,
         latitude: roundCoordinate(result.latitude),
         longitude: roundCoordinate(result.longitude),
       }];

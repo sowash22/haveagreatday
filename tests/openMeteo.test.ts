@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseForecastResponses, roundCoordinate } from "../src/openMeteo.ts";
+import { customaryUnitsForLocation, parseForecastResponses, roundCoordinate } from "../src/openMeteo.ts";
 
 const weather = {
   timezone: "America/Los_Angeles",
@@ -61,5 +61,14 @@ describe("Open-Meteo parsing", () => {
     expect(roundCoordinate(34.145)).toBe(34.15);
     expect(roundCoordinate(-118.146)).toBe(-118.15);
     expect(Object.is(roundCoordinate(-0.001), -0)).toBe(false);
+  });
+
+  it("chooses customary weather units from the location before falling back to locale", () => {
+    expect(customaryUnitsForLocation({ country: "United States", countryCode: "US" }, "fr-FR")).toBe("imperial");
+    expect(customaryUnitsForLocation({ country: "Canada", countryCode: "CA" }, "en-US")).toBe("metric");
+    expect(customaryUnitsForLocation({ country: "Puerto Rico" }, "es-ES")).toBe("imperial");
+    expect(customaryUnitsForLocation(null, "en-US")).toBe("imperial");
+    expect(customaryUnitsForLocation(null, "fr-FR")).toBe("metric");
+    expect(customaryUnitsForLocation(null, "not a locale")).toBe("metric");
   });
 });

@@ -11,9 +11,9 @@ description: A cinematic, one-answer outdoor planner.
 
 ## Hierarchy
 
-The whole planner fits in one normal viewport. The card contains, in order: brand, place search with an adjacent temperature-unit toggle, a compact seven-day ribbon with day names only, one selected day, the three strongest schedule-friendly windows, one short explanation, and a collapsed method disclosure. Each window keeps its time dominant, followed by two quiet evidence lines for weather and light, then temperature, AQI, and UV. The app evaluates Morning, Noon, Evening, and Night, then keeps three; Morning, Evening, and Night win ties so Noon appears only when its forecast fit is better. There is no app bar, page footer, activity control, alternatives section, or preferences form on the primary surface. One compact hourly-fit chart belongs inside the disclosure, never on the main decision surface.
+The whole planner fits in one normal viewport. The card contains, in order: brand, place search with an adjacent temperature-unit toggle, a compact seven-day ribbon with day names only, one selected day, up to three schedule-friendly windows ranked Best, Next best, and Third best, one short explanation, and a collapsed method disclosure. The ranking always runs left to right by forecast fit rather than time of day. Each window keeps its time dominant, followed by two quiet evidence lines for weather and light, then temperature, AQI, and UV. The app evaluates Morning, Noon, Evening, and Night, then keeps three; Morning, Evening, and Night win ties so Noon appears only when its forecast fit is better. There is no app bar, page footer, activity control, alternatives section, or preferences form on the primary surface. One compact hourly-fit chart belongs inside the disclosure, never on the main decision surface.
 
-Location search opens a focused dialog. Recent places appear first, followed by search and approximate device location. The week ribbon keeps all seven days comparable and lets one tap replace the main answer. Recommended windows are read-only results, not controls. After-dark windows are labeled plainly, and the evidence panel explains all displayed windows together.
+Location search opens a focused dialog. Recent places appear first, followed by search and approximate device location. Temperature units follow the selected location until the user taps the adjacent toggle, which becomes their persistent override. The week ribbon keeps all seven days comparable and lets one tap replace the main answer. Recommended windows are read-only results, not controls. After-dark windows are labeled plainly, and the evidence panel explains all displayed windows together.
 
 ## Visual language
 
@@ -25,7 +25,7 @@ Location search opens a focused dialog. Recent places appear first, followed by 
 
 ## Photography
 
-Use the local, curated Unsplash set as weather-aware scene pools. Clear or fair conditions use active outdoor scenes. Cloud, rain, and snow forecasts override them with matching weather scenes. Advance the pool only on refresh and day selection, crop with `object-fit: cover`, tune subject position per scene, and keep photographer credit inside the method disclosure.
+Use seven-photo curated Unsplash scene pools for each weather family, mixing local fallbacks with responsive direct Unsplash image loads. Clear or fair conditions use active outdoor scenes. Cloud, rain, and snow forecasts override them with matching weather scenes. Advance the pool only on refresh and day selection so a full week of similar weather still feels varied. Crop with `object-fit: cover`, tune subject position per scene, fall back to the local scene after a remote error, and keep photographer credit inside the method disclosure.
 
 ## Motion
 

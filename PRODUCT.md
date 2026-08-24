@@ -16,18 +16,18 @@ Have a Great Day compares the next seven days of local weather, air quality, UV,
 
 ## Primary workflow
 
-Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The main answer automatically ranks four parts of the day and presents the best three as read-only results, so people can choose around real schedules without another interaction. Each result shows its weather condition, feels-like temperature, AQI, UV, and light status without opening the deeper explanation. Recent places stay on the device. Opening the method disclosure reveals their combined measurements, an explorable 6 AM to 10 PM fit chart with all three windows highlighted, the tradeoff method, data source, photo credit, and privacy link.
+Choose a place and read one day at a glance. A compact week ribbon shows day names only and lets the user inspect another day with one tap. The main answer automatically ranks four parts of the day and presents up to three read-only results from best to third best, so people see the strongest choice first while retaining schedule flexibility. Each result shows its weather condition, feels-like temperature, AQI, UV, and light status without opening the deeper explanation. Recent places stay on the device. Opening the method disclosure reveals their combined measurements, an explorable 6 AM to 10 PM fit chart with all three windows highlighted, the tradeoff method, data source, photo credit, and privacy link.
 
 ## Capabilities and constraints
 
-- One best day with all seven days visible and three schedule-friendly windows for the selected day.
+- One best day with all seven days visible and up to three clearly ranked windows for the selected day.
 - Activity weighting remains available to agent requests through query parameters, not as customer-facing UI.
-- Place search, approximate device location, recent places, a saved °C/°F toggle, and shareable query parameters.
-- Weather-matched local Unsplash scene pools that advance on refresh and day selection.
+- Place search, approximate device location, recent places, an automatic location-aware °C/°F toggle with saved user override, and shareable query parameters.
+- Seven-image weather-matched Unsplash scene pools that advance on refresh and day selection, with local fallbacks for remote failures.
 - A normalized hourly-fit chart that compares weather, air, comfort, and UV without mixing incompatible units.
-- Metric and imperial display honored from saved preference or query parameters.
+- Metric and imperial display defaults to the location's customary weather unit, then honors a saved user override or explicit query parameter.
 - Forecast quality depends on upstream data and is not medical or safety advice.
-- No account, analytics, long-range monthly forecast, or primary-screen data dashboard.
+- No account, advertising, first-party analytics, long-range monthly forecast, or primary-screen data dashboard.
 
 ## Product principles
 
