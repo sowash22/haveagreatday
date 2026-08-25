@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customaryUnitsForLocation, parseForecastResponses, roundCoordinate } from "../src/openMeteo.ts";
+import { customaryUnitsForLocation, parseForecastResponses, parsePhotonLocations, roundCoordinate } from "../src/openMeteo.ts";
 
 const weather = {
   timezone: "America/Los_Angeles",
@@ -70,5 +70,15 @@ describe("Open-Meteo parsing", () => {
     expect(customaryUnitsForLocation(null, "en-US")).toBe("imperial");
     expect(customaryUnitsForLocation(null, "fr-FR")).toBe("metric");
     expect(customaryUnitsForLocation(null, "not a locale")).toBe("metric");
+  });
+
+  it("parses typo-tolerant city results", () => {
+    const results = parsePhotonLocations({
+      features: [{
+        properties: { name: "Portland", state: "Oregon", country: "United States", countrycode: "US" },
+        geometry: { coordinates: [-122.674194, 45.5202471] },
+      }],
+    });
+    expect(results).toEqual([{ name: "Portland", region: "Oregon", country: "United States", countryCode: "US", latitude: 45.52, longitude: -122.67 }]);
   });
 });

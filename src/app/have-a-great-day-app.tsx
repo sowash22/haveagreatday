@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assessAdaptiveDay } from "../adaptive-plan";
 import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
+import { locationMatchesQuery, rankLocationSuggestions } from "../location-search";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, uvProtectionAdvice, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
@@ -246,10 +247,6 @@ function formatTemperature(celsius: number | null, units: Units): string {
   return units === "metric" ? `${Math.round(celsius)} °C` : `${Math.round(celsius * 9 / 5 + 32)} °F`;
 }
 
-function formatValue(value: number | null, suffix = ""): string {
-  return value === null ? "Unavailable" : `${Math.round(value)}${suffix}`;
-}
-
 function selectedHours(day: WindowPlan | undefined): HourConditions[] {
   return day?.recommendation.hours.flatMap((index) => day.conditions[index] ? [day.conditions[index]] : []) ?? [];
 }
@@ -310,30 +307,6 @@ function average(values: Array<number | null>): number | null {
 function maxValue(values: Array<number | null>): number | null {
   const present = values.filter((value): value is number => value !== null);
   return present.length ? Math.max(...present) : null;
-}
-
-function thresholdTimeSpan(hours: HourConditions[], value: (hour: HourConditions) => number | null, threshold: number): string | null {
-  const matching = hours.filter((hour) => (value(hour) ?? -Infinity) >= threshold);
-  const first = matching[0]?.time;
-  const last = matching.at(-1)?.time;
-  return first && last ? `${formatTime(first, { hour: "numeric" })} to ${formatTime(nextHour(last), { hour: "numeric" })}` : null;
-}
-
-function temperatureComfortLabel(celsius: number | null): string {
-  if (celsius === null) return "Not available";
-  if (celsius < 0) return "Very cold";
-  if (celsius < 10) return "Cool";
-  if (celsius <= 26) return "Comfortable";
-  if (celsius < 33) return "Warm";
-  return "Hot";
-}
-
-function rainChanceLabel(chance: number | null): string {
-  if (chance === null) return "Not available";
-  if (chance <= 10) return "Dry";
-  if (chance <= 30) return "Small chance";
-  if (chance <= 60) return "Possible";
-  return "Likely";
 }
 
 function periodEvidence(day: WindowPlan, units: Units): { condition: string; temperature: string; aqi: string; uv: string } {
@@ -434,17 +407,19 @@ export function HaveAGreatDayApp() {
   const [searchMessage, setSearchMessage] = useState("Search worldwide, then choose the matching place.");
   const [searchError, setSearchError] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [forgotten, setForgotten] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [sceneSequence, setSceneSequence] = useState(0);
   const [failedSceneSrc, setFailedSceneSrc] = useState("");
+  const [founderOpen, setFounderOpen] = useState(false);
   const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
-  const methodDetails = useRef<HTMLDetailsElement | null>(null);
   const founderDetails = useRef<HTMLDetailsElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const searchController = useRef<AbortController | null>(null);
+  const suggestionController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
   const conversationController = useRef<AbortController | null>(null);
   const unitsOverridden = useRef(false);
@@ -455,6 +430,10 @@ export function HaveAGreatDayApp() {
   }, []);
 
   const openPlaceDialog = useCallback(() => {
+    setQuery("");
+    setSearchResults([]);
+    setSearchError(false);
+    setSearchMessage("Start typing and we’ll suggest matching places.");
     placeDialog.current?.showModal();
     window.setTimeout(() => searchInput.current?.focus(), 0);
   }, []);
@@ -526,6 +505,7 @@ export function HaveAGreatDayApp() {
     return () => {
       window.removeEventListener("keydown", handleShortcut);
       searchController.current?.abort();
+      suggestionController.current?.abort();
       forecastController.current?.abort();
       conversationController.current?.abort();
     };
@@ -534,12 +514,11 @@ export function HaveAGreatDayApp() {
   useEffect(() => {
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (!(event.target instanceof Node)) return;
-      for (const details of [methodDetails.current, founderDetails.current]) {
-        if (details?.open && !details.contains(event.target)) details.open = false;
-      }
+      const details = founderDetails.current;
+      if (details?.open && !details.contains(event.target)) details.open = false;
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      const details = [methodDetails.current, founderDetails.current].find((item) => item?.open);
+      const details = founderDetails.current;
       if (event.key !== "Escape" || !details?.open) return;
       closeDisclosure(details);
     };
@@ -550,6 +529,41 @@ export function HaveAGreatDayApp() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, []);
+
+  useEffect(() => {
+    const place = query.trim();
+    suggestionController.current?.abort();
+    if (place.length < 2) {
+      setSuggesting(false);
+      setSearchResults([]);
+      if (!searchError) setSearchMessage("Start typing and we’ll suggest matching places.");
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const controller = new AbortController();
+      suggestionController.current = controller;
+      setSuggesting(true);
+      setSearchMessage("Finding suggestions...");
+      void searchLocations(place, controller.signal).then((remote) => {
+        if (controller.signal.aborted) return;
+        const recentMatches = savedLocations.filter((saved) => locationMatchesQuery(place, saved));
+        const results = rankLocationSuggestions(place, [...recentMatches, ...remote]);
+        setSearchResults(results);
+        setSearchMessage(results.length ? "Choose a suggestion, or keep typing." : "No close matches yet. Try a nearby city or a different spelling.");
+      }).catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setSearchMessage("Suggestions are unavailable right now. Press Enter to try again.");
+      }).finally(() => {
+        if (!controller.signal.aborted) setSuggesting(false);
+      });
+    }, 240);
+
+    return () => {
+      window.clearTimeout(timeout);
+      suggestionController.current?.abort();
+    };
+  }, [query, savedLocations, searchError]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -584,11 +598,14 @@ export function HaveAGreatDayApp() {
     setSearchError(false);
     setSearchMessage("Searching for matching places...");
     setSearching(true);
+    suggestionController.current?.abort();
     searchController.current?.abort();
     const controller = new AbortController();
     searchController.current = controller;
     try {
-      const results = await searchLocations(place, controller.signal);
+      const remote = await searchLocations(place, controller.signal);
+      const recentMatches = savedLocations.filter((saved) => locationMatchesQuery(place, saved));
+      const results = rankLocationSuggestions(place, [...recentMatches, ...remote]);
       setSearchResults(results);
       setSearchMessage(results.length ? `${results.length} matching ${results.length === 1 ? "place" : "places"}.` : "No matches. Check the spelling or try a nearby city.");
     } catch (error) {
@@ -719,14 +736,6 @@ export function HaveAGreatDayApp() {
   const excludedWindowNotes = useMemo(() => conversationVoice?.mode === "none" ? [] : activePeriods
     .filter((period) => !conversationVoice?.selectedIds.includes(period.id) && period.conditions.some((hour) => hour.time > localHour))
     .map((period) => excludedPeriodNote(period, profile, localHour)), [activePeriods, conversationVoice, localHour, profile]);
-  const activeHours = conversationVoice?.mode === "windows" ? displayedPeriods.flatMap((period) => selectedHours(period)) : planningHours;
-  const meanTemperature = average(activeHours.map((hour) => hour.apparentTemperatureC));
-  const maxAqi = maxValue(activeHours.map((hour) => hour.usAqi));
-  const maxUv = maxValue(activeHours.map((hour) => hour.uvIndex));
-  const maxRain = maxValue(activeHours.map((hour) => hour.precipitationProbability));
-  const dayMaxUv = maxValue(planningHours.map((hour) => hour.uvIndex));
-  const uvProtectionSpan = thresholdTimeSpan(planningHours, (hour) => hour.uvIndex, 3);
-  const veryHighUvSpan = thresholdTimeSpan(planningHours, (hour) => hour.uvIndex, 8);
   const sceneHours = selectedHours(activeDay);
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
@@ -734,43 +743,6 @@ export function HaveAGreatDayApp() {
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
   const sceneCandidate = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
   const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
-  const rankingSummary = conversationVoice?.mode === "none"
-    ? `${activeDayLabel} does not give us two practical daylight windows we can recommend with confidence.`
-    : dayMaxUv !== null && dayMaxUv >= 8
-      ? `${activeDayLabel} has workable conditions earlier and later, but UV reaches ${uvCategory(dayMaxUv).toLowerCase()} levels around midday.`
-      : dayMaxUv !== null && dayMaxUv >= 3
-        ? `${activeDayLabel} has worthwhile outdoor windows. We favor times with lower UV and a better balance of comfort, air, and weather.`
-        : conversationVoice?.mode === "all_day"
-          ? `${activeDayLabel} stays comfortable and UV remains low across the daylight hours we checked.`
-          : displayedPeriods.length
-            ? `These are the ${displayedPeriods.length === 2 ? "two" : "three"} strongest daylight windows after comparing comfort, weather, air quality, and UV.`
-            : "We compare weather, air quality, UV, comfort, and daylight to find practical times outside.";
-  const methodTitle = !conversationVoice
-    ? "How the plan comes together"
-    : conversationVoice.mode === "none"
-      ? "No practical pair of windows"
-      : dayMaxUv !== null && dayMaxUv >= 8
-        ? "Plan around the strongest sun"
-        : dayMaxUv !== null && dayMaxUv >= 3
-          ? "A good day with sun protection"
-          : conversationVoice.mode === "all_day"
-            ? "A genuinely flexible day"
-            : "These times offer the best balance";
-  const practicalPlanTitle = dayMaxUv === null
-    ? "Check the sun before you go"
-    : dayMaxUv >= 8
-      ? "Avoid the UV peak when you can"
-      : dayMaxUv >= 3
-        ? "Plan for sun protection"
-        : "UV stays low";
-  const practicalPlan = dayMaxUv === null
-    ? "UV data is unavailable, so this plan cannot account for sun exposure. Check local UV guidance before a longer outing."
-    : dayMaxUv >= 8
-      ? `UV reaches ${uvCategory(dayMaxUv).toLowerCase()} levels ${veryHighUvSpan ? `from ${veryHighUvSpan}` : "around midday"}. Prefer the recommended earlier or later windows. Sun protection is recommended${uvProtectionSpan ? ` from ${uvProtectionSpan}` : " whenever UV is 3 or higher"}: seek shade and use protective clothing, a broad-brimmed hat, sunglasses, and broad-spectrum sunscreen.`
-      : dayMaxUv >= 3
-        ? `Sun protection is recommended${uvProtectionSpan ? ` from ${uvProtectionSpan}` : " around midday"}, when UV is 3 or higher. Seek shade and use protective clothing, a broad-brimmed hat, sunglasses, and broad-spectrum sunscreen.`
-        : "UV stays low in the hours checked. Under normal circumstances, no special UV protection is needed for a short outing.";
-  const methodExplanation = "We compare weather, feels-like temperature, US AQI, UV, and daylight hour by hour. Very-high UV, severe weather, unhealthy air, and extreme temperatures act as guardrails, not small deductions in a score.";
   useEffect(() => {
     conversationController.current?.abort();
     if (!conversationInput || !conversationKey) return;
@@ -814,7 +786,7 @@ export function HaveAGreatDayApp() {
   return <div className="experience-root">
     <a className="skip-link" href="#main">Skip to planner</a>
     <main id="main" className="single-screen">
-      <section className="decision-card" data-scene={sceneKey} aria-labelledby="decision-title">
+      <section className="decision-card" data-scene={sceneKey} data-founder-open={founderOpen || undefined} aria-labelledby={founderOpen ? "founder-title" : "decision-title"}>
         <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" loader={isUnsplashScene(scene.src) ? unsplashImageLoader : undefined} onError={isUnsplashScene(scene.src) ? () => setFailedSceneSrc(scene.src) : undefined} style={scene.position ? { objectPosition: scene.position } : undefined}/>
         <div className="decision-card__scrim" aria-hidden="true"/>
 
@@ -831,7 +803,7 @@ export function HaveAGreatDayApp() {
           return <button type="button" key={day.date} disabled={!selectable} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={dayName(day.date)} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" })}</span></button>;
         })}</div></div> : null}
 
-        <div className="decision-copy" aria-live="polite">
+        <div className="decision-copy" aria-live="polite" aria-hidden={founderOpen || undefined}>
           {status.kind === "idle" ? <><h1 id="decision-title">Not just a weather app.</h1><p>We bring together weather, AQI, UV, comfort, and a little AI to find better times for walks, hikes, rides, kids, and pets.</p><button className="card-action" type="button" onClick={openPlaceDialog}>Choose a place</button></> : null}
           {status.kind === "loading" ? <div className="card-loading" role="status"><span/><h1 id="decision-title">Turning the forecast into a plan.</h1><p>We&apos;re weighing weather, air quality, UV, comfort, and daylight across the week.</p></div> : null}
           {status.kind === "error" ? <div className="card-error" role="alert"><h1 id="decision-title">{status.title}</h1><p>{status.message}</p><div>{status.retry && location ? <button className="card-action" type="button" onClick={() => void loadLocation(location)}>Try again</button> : null}<button className="card-action card-action--quiet" type="button" onClick={openPlaceDialog}>Change place</button></div></div> : null}
@@ -855,34 +827,14 @@ export function HaveAGreatDayApp() {
 
         <div className="card-footer">
           <div className="card-disclosures">
-            <details ref={methodDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && founderDetails.current?.open) founderDetails.current.open = false; }}>
-              <summary>{status.kind === "ready" ? "Why this plan?" : "How it works"}</summary>
-              <div className="method-details__body">
-                <header className="method-heading"><div><h2>{methodTitle}</h2><p>{rankingSummary}</p></div><button className="sheet-close" type="button" onClick={() => closeDisclosure(methodDetails.current)}>Close</button></header>
-                {status.kind === "ready" && activeDay && activeHours.length ? <>
-                  <dl className="method-facts">
-                    <div><dt>Feels like</dt><dd>{formatTemperature(meanTemperature, units)}</dd><small>{temperatureComfortLabel(meanTemperature)}</small></div>
-                    <div><dt>Rain chance</dt><dd>{formatValue(maxRain, "%")}</dd><small>{rainChanceLabel(maxRain)}</small></div>
-                    <div><dt>Air in plan</dt><dd>{maxAqi === null ? "No data" : formatValue(maxAqi, " AQI")}</dd><small>{maxAqi === null ? "Not available" : aqiCategory(maxAqi)}</small></div>
-                    <div><dt>UV in plan</dt><dd>{maxUv === null ? "No data" : maxUv.toFixed(1)}</dd><small>{maxUv === null ? "Not available" : uvCategory(maxUv)}</small></div>
-                  </dl>
-                </> : null}
-                {status.kind === "ready" && activeDay && activeHours.length ? <div className="method-guidance">
-                  <section className="method-guidance__plan" aria-labelledby="practical-plan-title"><h3 id="practical-plan-title">{practicalPlanTitle}</h3><p>{practicalPlan}</p></section>
-                  <section className="method-breakdown" aria-labelledby="method-breakdown-title"><h3 id="method-breakdown-title">Why this plan</h3><p>{methodExplanation}</p></section>
-                </div> : null}
-              </div>
-            </details>
-
-            <details ref={founderDetails} className="method-details" onToggle={(event) => { if (event.currentTarget.open && methodDetails.current?.open) methodDetails.current.open = false; }}>
+            <details ref={founderDetails} className="method-details" onToggle={(event) => setFounderOpen(event.currentTarget.open)}>
               <summary>Why I built this</summary>
               <div className="method-details__body founder-note">
-                <header className="founder-note__header"><h2>I wanted one clear answer</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
+                <header className="founder-note__header"><h2 id="founder-title">When should we go outside?</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
                 <div className="founder-note__story">
-                  <p>Weather apps show us plenty of data, but often leave one question unanswered: when should we actually go outside?</p>
-                  <p>I felt this whenever my mom asked when to take my daughter to the park. I would compare the hourly weather, temperature, sunlight, AQI, and UV, then turn all those numbers into one recommendation.</p>
-                  <p>Have a Great Day does that work for anyone planning a walk, ride, park visit, or time outside with someone they care about.</p>
-                  <p>Fewer numbers. A more useful answer. I hope it helps you have a great day.</p>
+                  <p>Most weather apps give us plenty of useful data, but they don’t usually answer the question I’m actually asking: when will it feel comfortable to go outside?</p>
+                  <p>My daughter always wants to go to the park, and my mom often asks me, “What time should I take her?” I would open the hourly forecast and compare the weather, feels-like temperature, rain, UV, air quality, and daylight.</p>
+                  <p>Have a Great Day grew from that everyday family question. It brings those details together and suggests a few practical times, so there’s less to figure out before stepping outside. I hope it helps your family too.</p>
                 </div>
               </div>
             </details>
@@ -894,11 +846,11 @@ export function HaveAGreatDayApp() {
 
     <dialog ref={placeDialog} className="place-dialog" aria-labelledby="place-title" onClick={(event) => { if (event.target === event.currentTarget) event.currentTarget.close(); }}><div className="place-dialog__panel">
       <header><h2 id="place-title">Choose a place</h2><button className="text-button" type="button" onClick={() => placeDialog.current?.close()}>Close</button></header>
-      {savedLocations.length > 0 ? <section className="saved-list" aria-labelledby="saved-title"><h3 id="saved-title">Recent places</h3><div>{savedLocations.map((saved) => <button type="button" key={`${saved.latitude}-${saved.longitude}`} onClick={() => chooseLocation(saved)}><span>{saved.name}</span><small>{[saved.region, saved.country].filter(Boolean).join(", ") || `${saved.latitude.toFixed(2)}, ${saved.longitude.toFixed(2)}`}</small></button>)}</div></section> : null}
-      <form className="location-form" onSubmit={handleSearch} noValidate><label htmlFor="city">Search for a city or town</label><div className="input-row"><input ref={searchInput} id="city" name="city" type="search" autoComplete="address-level2" enterKeyHint="search" placeholder="Try Pasadena or Portland" aria-describedby="city-help" aria-invalid={searchError || undefined} value={query} onChange={(event) => { setQuery(event.target.value); if (searchError) setSearchError(false); }} required/><button className="button" type="submit" disabled={searching} aria-busy={searching}>{searching ? "Searching..." : "Search"}</button></div><p id="city-help" className={`field-help${searchError ? " field-help--error" : ""}`} role={searchError ? "alert" : undefined}>{searchMessage}</p></form>
+      <form className="location-form" onSubmit={handleSearch} noValidate><label htmlFor="city">City or town</label><input ref={searchInput} id="city" name="city" type="search" autoComplete="off" enterKeyHint="search" placeholder="Start typing a place" aria-describedby="city-help" aria-controls="location-suggestions" aria-expanded={searchResults.length > 0} aria-autocomplete="list" aria-invalid={searchError || undefined} aria-busy={searching || suggesting} value={query} onChange={(event) => { setQuery(event.target.value); if (searchError) setSearchError(false); }} required/><p id="city-help" className={`field-help${searchError ? " field-help--error" : ""}`} role={searchError ? "alert" : "status"}>{searchMessage}</p></form>
+      {query.trim().length < 2 && savedLocations.length > 0 ? <section className="saved-list" aria-labelledby="saved-title"><h3 id="saved-title">Recent places</h3><div>{savedLocations.map((saved) => <button type="button" key={`${saved.latitude}-${saved.longitude}`} onClick={() => chooseLocation(saved)}><span>{saved.name}</span><small>{[saved.region, saved.country].filter(Boolean).join(", ") || `${saved.latitude.toFixed(2)}, ${saved.longitude.toFixed(2)}`}</small></button>)}</div></section> : null}
+      <section id="location-suggestions" className="search-results" aria-label="Place suggestions" aria-live="polite" aria-busy={searching || suggesting}>{query.trim().length >= 2 && searchResults.length > 0 ? <><h3>Suggestions</h3><ul>{searchResults.map((result) => <li key={`${result.latitude}-${result.longitude}`}><button type="button" onClick={() => chooseLocation(result)}><span>{result.name}</span><small>{[result.region, result.country].filter(Boolean).join(", ")}</small></button></li>)}</ul></> : null}</section>
       <button className="button button--soft" type="button" onClick={useApproximateLocation} disabled={locating} aria-busy={locating}>{locating ? "Finding you..." : "Use my location"}</button>
-      <div className="search-results" aria-live="polite">{searchResults.length > 0 ? <ul>{searchResults.map((result) => <li key={`${result.latitude}-${result.longitude}`}><button type="button" onClick={() => chooseLocation(result)}><span>{result.name}</span><small>{[result.region, result.country].filter(Boolean).join(", ")}</small></button></li>)}</ul> : null}</div>
-      <div className="privacy-note"><p>No account or first-party analytics. Forecasts use Open-Meteo, wording uses our inference service, and photos use Unsplash.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
+      <div className="privacy-note"><p>No account or first-party analytics. Place search uses Open-Meteo and Photon, forecasts use Open-Meteo, wording uses our inference service, and photos use Unsplash.</p>{location ? <button className="text-button text-button--danger" type="button" onClick={forgetLocation} disabled={forgotten}>{forgotten ? "Removed from recent places" : "Forget this place"}</button> : null}</div>
     </div></dialog>
   </div>;
 }

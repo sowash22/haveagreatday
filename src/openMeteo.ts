@@ -151,11 +151,10 @@ async function fetchJson(url: URL, source: ProviderError["source"], signal?: Abo
 
 export async function searchLocations(query: string, signal?: AbortSignal): Promise<LocationChoice[]> {
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
-  url.search = new URLSearchParams({ name: query, count: "5", language: "en", format: "json" }).toString();
+  url.search = new URLSearchParams({ name: query, count: "10", language: "en", format: "json" }).toString();
   const data = record(await fetchJson(url, "location", signal), "Location response");
-  if (data.results === undefined) return [];
-  if (!Array.isArray(data.results)) throw new ProviderError("location", "The location provider returned malformed results. Try another search.");
-  return data.results.flatMap((item): LocationChoice[] => {
+  if (data.results !== undefined && !Array.isArray(data.results)) throw new ProviderError("location", "The location provider returned malformed results. Try another search.");
+  const exactMatches = (data.results ?? []).flatMap((item): LocationChoice[] => {
     try {
       const result = record(item, "Location result");
       if (typeof result.latitude !== "number" || typeof result.longitude !== "number") return [];
@@ -166,6 +165,42 @@ export async function searchLocations(query: string, signal?: AbortSignal): Prom
         countryCode: typeof result.country_code === "string" ? result.country_code.toUpperCase() : undefined,
         latitude: roundCoordinate(result.latitude),
         longitude: roundCoordinate(result.longitude),
+      }];
+    } catch {
+      return [];
+    }
+  });
+  if (exactMatches.length) return exactMatches;
+
+  const fuzzyUrl = new URL("https://photon.komoot.io/api/");
+  fuzzyUrl.search = new URLSearchParams({ q: query, limit: "10", lang: "en" }).toString();
+  try {
+    return parsePhotonLocations(await fetchJson(fuzzyUrl, "location", signal));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    return [];
+  }
+}
+
+export function parsePhotonLocations(value: unknown): LocationChoice[] {
+  const data = record(value, "Fuzzy location response");
+  if (!Array.isArray(data.features)) return [];
+  return data.features.flatMap((item): LocationChoice[] => {
+    try {
+      const feature = record(item, "Fuzzy location result");
+      const properties = record(feature.properties, "Fuzzy location properties");
+      const geometry = record(feature.geometry, "Fuzzy location geometry");
+      if (!Array.isArray(geometry.coordinates) || typeof geometry.coordinates[0] !== "number" || typeof geometry.coordinates[1] !== "number") return [];
+      const longitude = geometry.coordinates[0];
+      const latitude = geometry.coordinates[1];
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return [];
+      return [{
+        name: stringValue(properties.name, "Fuzzy location name"),
+        region: typeof properties.state === "string" ? properties.state : typeof properties.county === "string" ? properties.county : "",
+        country: typeof properties.country === "string" ? properties.country : "",
+        countryCode: typeof properties.countrycode === "string" ? properties.countrycode.toUpperCase() : undefined,
+        latitude: roundCoordinate(latitude),
+        longitude: roundCoordinate(longitude),
       }];
     } catch {
       return [];

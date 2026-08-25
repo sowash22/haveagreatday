@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         </header>
         <section>
           <h2>What leaves your browser</h2>
-          <p>A city search is sent to Open-Meteo’s geocoding service. After you choose a result or permit browser location access, coordinates are rounded to two decimal places before they are sent to Open-Meteo’s weather and air-quality services. The selected place name, day summary, allowed recommendation modes, and up to three candidate windows are sent to our inference service so it can choose and phrase the most useful presentation. Coordinates, recent-place history, and device data are not included in that request. Some background photos load directly from Unsplash’s image service, which receives the ordinary request information needed to deliver and count a photo view. Your searched coordinates are not included in the photo URL.</p>
+          <p>A city search is sent to Open-Meteo’s geocoding service. If it finds no match, the search is sent to Photon for typo-tolerant suggestions. After you choose a result or permit browser location access, coordinates are rounded to two decimal places before they are sent to Open-Meteo’s weather and air-quality services. The selected place name, day summary, allowed recommendation modes, and up to three candidate windows are sent to our inference service so it can choose and phrase the most useful presentation. Coordinates, recent-place history, and device data are not included in that request. Some background photos load directly from Unsplash’s image service, which receives the ordinary request information needed to deliver and count a photo view. Your searched coordinates are not included in the photo URL.</p>
         </section>
         <section>
           <h2>What stays on this device</h2>
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
         </section>
         <section>
           <h2>Provider terms</h2>
-          <p>Open-Meteo and Unsplash receive requests under their own terms and privacy practices. Our inference service may use a configured model provider to choose among prevalidated presentation modes and write the connective copy, but the allowed outcomes, ranked times, severe-weather guardrails, and measurements always come from the app’s forecast calculations. Read <a href="https://open-meteo.com/en/terms" rel="noreferrer">Open-Meteo’s terms</a> and <a href="https://unsplash.com/terms" rel="noreferrer">Unsplash’s terms</a> before using the service for a sensitive purpose.</p>
+          <p>Open-Meteo, Photon, and Unsplash receive requests under their own terms and privacy practices. Our inference service may use a configured model provider to choose among prevalidated presentation modes and write the connective copy, but the allowed outcomes, ranked times, severe-weather limits, and measurements always come from the app’s forecast calculations. Read <a href="https://open-meteo.com/en/terms" rel="noreferrer">Open-Meteo’s terms</a>, <a href="https://photon.komoot.io/" rel="noreferrer">about Photon</a>, and <a href="https://unsplash.com/terms" rel="noreferrer">Unsplash’s terms</a> before using the service for a sensitive purpose.</p>
         </section>
       </main>
       <footer className="statement-footer"><div className="page-shell"><p className="statement-footer__line">More good hours outside. Less guessing.</p><div className="statement-footer__meta"><span>Have a Great Day</span><nav aria-label="Footer navigation"><Link href="/">Planner</Link></nav></div></div></footer>
