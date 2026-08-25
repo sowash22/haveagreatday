@@ -1072,11 +1072,11 @@ export function HaveAGreatDayApp() {
             <details ref={founderDetails} className="method-details" onToggle={(event) => setFounderOpen(event.currentTarget.open)}>
               <summary>Why I built this</summary>
               <div className="method-details__body founder-note">
-                <header className="founder-note__header"><h2 id="founder-title">When should we go outside?</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
+                <header className="founder-note__header"><h2 id="founder-title">A simple question</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
                 <div className="founder-note__story">
-                  <p>Most weather apps give us plenty of useful data, but they don’t usually answer the question I’m actually asking: when will it feel comfortable to go outside?</p>
-                  <p>My daughter always wants to go to the park, and my mom often asks me, “What time should I take her?” I would open the hourly forecast and compare the weather, feels-like temperature, rain, UV, air quality, and daylight.</p>
-                  <p>Have a Great Day grew from that everyday family question. It brings those details together and suggests a few practical times, so there’s less to figure out before stepping outside. I hope it helps your family too.</p>
+                  <p>My daughter is always ready for the park. When my mom asks, “What time should I take her?” I usually have to compare a lot of weather data before I can answer.</p>
+                  <p>Have a Great Day does that work for me. It brings together weather, comfort, UV, air quality, and daylight to find a few practical times to step outside.</p>
+                  <p>I built it for my family. I hope it helps yours too.</p>
                 </div>
               </div>
             </details>
