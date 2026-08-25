@@ -7,7 +7,7 @@ import { assessAdaptiveDay } from "../adaptive-plan";
 import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
 import { locationMatchesQuery, rankLocationSuggestions } from "../location-search";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
-import { ACTIVITIES, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
+import { ACTIVITIES, calendarWeekDates, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
 import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, uvProtectionAdvice, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
@@ -687,7 +687,13 @@ export function HaveAGreatDayApp() {
 
   const localHour = forecast ? currentHourInTimezone(forecast.timezone, clockTime ? new Date(clockTime) : new Date()) : "";
   const currentDate = localHour.slice(0, 10);
-  const dayPlans = useMemo(() => forecast ? recommendDays(forecast.conditions, profile, localHour, timePreference) : [], [forecast, profile, localHour, timePreference]);
+  const calendarDates = useMemo(() => currentDate ? calendarWeekDates(currentDate) : [], [currentDate]);
+  const dayPlans = useMemo(() => {
+    if (!forecast || !calendarDates.length) return [];
+    const calendarDateSet = new Set(calendarDates);
+    return recommendDays(forecast.conditions, profile, localHour, timePreference).filter((day) => calendarDateSet.has(day.date));
+  }, [calendarDates, forecast, localHour, profile, timePreference]);
+  const plansByDate = useMemo(() => new Map(dayPlans.map((day) => [day.date, day])), [dayPlans]);
   const rankedDays = useMemo(() => dayPlans.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100)), [dayPlans]);
   const topDay = rankedDays[0];
   const activeDay = dayPlans.find((day) => day.date === selectedDate && day.score !== null) ?? topDay ?? dayPlans.find((day) => day.date >= currentDate) ?? dayPlans.at(-1);
@@ -813,11 +819,12 @@ export function HaveAGreatDayApp() {
           </div>
         </header>
 
-        {status.kind === "ready" && activeDay ? <div className="week-overview"><p>The week ahead</p><div className="week-times" role="group" aria-label="Choose a day in the next week">{dayPlans.map((day) => {
-          const selectable = day.score !== null;
-          const passed = day.date < currentDate;
-          const label = passed ? `${dayName(day.date)}, already passed` : !selectable ? `${dayName(day.date)}, no outdoor time remaining` : dayName(day.date);
-          return <button type="button" key={day.date} disabled={!selectable} data-passed={passed || undefined} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={label} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" })}</span></button>;
+        {status.kind === "ready" && activeDay ? <div className="week-overview"><p>This week</p><div className="week-times" role="group" aria-label="Choose a day this week">{calendarDates.map((date) => {
+          const day = plansByDate.get(date);
+          const passed = date < currentDate;
+          const selectable = !passed && day?.score !== null && day !== undefined;
+          const label = passed ? `${dayName(date)}, already passed` : !selectable ? `${dayName(date)}, no outdoor time remaining` : dayName(date);
+          return <button type="button" key={date} disabled={!selectable} data-passed={passed || undefined} data-selected={date === activeDay.date || undefined} aria-pressed={date === activeDay.date} aria-label={label} onClick={() => chooseDate(date)}><span>{formatTime(`${date}T12:00`, { weekday: "short" })}</span></button>;
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite" aria-hidden={founderOpen || undefined}>

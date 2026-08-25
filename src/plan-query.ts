@@ -18,6 +18,14 @@ export const TIME_OPTIONS: Record<TimePreference, string> = {
 export type Activity = keyof typeof ACTIVITIES;
 export type SceneKey = Activity | "cloudy" | "rain" | "snow";
 
+export function calendarWeekDates(date: string): string[] {
+  const current = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(current.getTime())) return [];
+  const daysSinceMonday = (current.getUTCDay() + 6) % 7;
+  const monday = current.getTime() - daysSinceMonday * 86_400_000;
+  return Array.from({ length: 7 }, (_, index) => new Date(monday + index * 86_400_000).toISOString().slice(0, 10));
+}
+
 export function weatherScene(activity: Activity, code: number | null): SceneKey {
   if (code !== null && ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))) return "snow";
   if (code !== null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95)) return "rain";

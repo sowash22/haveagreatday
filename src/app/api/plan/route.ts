@@ -1,5 +1,5 @@
 import { fetchForecast, ProviderError, roundCoordinate } from "../../../openMeteo.ts";
-import { ACTIVITIES, parsePlanQuery, PlanQueryError } from "../../../plan-query.ts";
+import { ACTIVITIES, calendarWeekDates, parsePlanQuery, PlanQueryError } from "../../../plan-query.ts";
 import { recommendDays, type DayPlan, type Units } from "../../../suitability.ts";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,9 @@ export async function GET(request: Request) {
   try {
     const query = parsePlanQuery(new URL(request.url).searchParams);
     const forecast = await fetchForecast(query.latitude, query.longitude);
-    const days = recommendDays(forecast.conditions, ACTIVITIES[query.activity].profile, currentHourInTimezone(forecast.timezone), query.time);
+    const currentLocalHour = currentHourInTimezone(forecast.timezone);
+    const calendarDateSet = new Set(calendarWeekDates(currentLocalHour.slice(0, 10)));
+    const days = recommendDays(forecast.conditions, ACTIVITIES[query.activity].profile, currentLocalHour, query.time).filter((day) => calendarDateSet.has(day.date));
     const ranked = days.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100));
     const selected = query.date ? days.find((day) => day.date === query.date) : ranked[0] ?? days[0];
     if (query.date && !selected) return Response.json({ error: `No forecast is available for ${query.date}.`, availableDates: days.map((day) => day.date) }, { status: 404 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePlanQuery, weatherScene } from "../src/plan-query.ts";
+import { calendarWeekDates, parsePlanQuery, weatherScene } from "../src/plan-query.ts";
 
 describe("plan query", () => {
   it("parses a complete agent request and rejects unsafe coordinates", () => {
@@ -14,5 +14,17 @@ describe("plan query", () => {
     expect(weatherScene("family", 45)).toBe("cloudy");
     expect(weatherScene("dog", 61)).toBe("rain");
     expect(weatherScene("walk", 75)).toBe("snow");
+  });
+
+  it("builds a Monday-through-Sunday calendar week", () => {
+    expect(calendarWeekDates("2026-08-27")).toEqual([
+      "2026-08-24",
+      "2026-08-25",
+      "2026-08-26",
+      "2026-08-27",
+      "2026-08-28",
+      "2026-08-29",
+      "2026-08-30",
+    ]);
   });
 });
