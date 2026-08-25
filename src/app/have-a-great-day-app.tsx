@@ -8,6 +8,7 @@ import { describeConversationDay, describeConversationWindow, fallbackConversati
 import { locationMatchesQuery, rankLocationSuggestions } from "../location-search";
 import { customaryUnitsForLocation, fetchForecast, ProviderError, roundCoordinate, searchLocations, type ForecastResult, type LocationChoice } from "../openMeteo";
 import { ACTIVITIES, calendarWeekDates, TIME_OPTIONS, weatherScene, type Activity, type SceneKey } from "../plan-query";
+import { readBrowserReminders, reminderBody, REMINDER_LEAD_MS, zonedTimeToEpoch, type BrowserReminder } from "../reminders";
 import { aqiCategory, rateHour, recommend, recommendDays, uvCategory, uvProtectionAdvice, type ComponentName, type DayPlan, type HourConditions, type HourRating, type Profile, type Recommendation, type TimePreference, type Units } from "../suitability";
 
 const ACTIVITY_KEY = "haveagreatday-activity:v1";
@@ -17,6 +18,7 @@ const UNITS_OVERRIDE_KEY = "haveagreatday-units-override:v1";
 const LOCATION_KEY = "haveagreatday-location";
 const LOCATION_HISTORY_KEY = "haveagreatday-locations:v1";
 const SCENE_ROTATION_KEY = "haveagreatday-scene:v1";
+const REMINDERS_KEY = "haveagreatday-reminders:v1";
 
 function migrateStorage(): void {
   const keys = [
@@ -38,6 +40,8 @@ function migrateStorage(): void {
 type Status =
   | { kind: "idle" | "loading" | "ready" }
   | { kind: "error"; title: string; message: string; retry: boolean };
+
+type NotificationState = "checking" | "unsupported" | NotificationPermission;
 
 type Scene = { src: string; photographer: string; href: string; position?: string };
 
@@ -393,6 +397,25 @@ function closeDisclosure(details: HTMLDetailsElement | null): void {
   details.querySelector<HTMLElement>("summary")?.focus();
 }
 
+function readSavedReminders(): BrowserReminder[] {
+  try {
+    return readBrowserReminders(JSON.parse(localStorage.getItem(REMINDERS_KEY) ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+
+async function showBrowserReminder(reminder: BrowserReminder): Promise<void> {
+  const registration = await navigator.serviceWorker.register("/notification-sw.js", { scope: "/" });
+  const ready = registration.active ? registration : await navigator.serviceWorker.ready;
+  await ready.showNotification("A good time outside is coming up", {
+    body: reminderBody(reminder),
+    icon: "/icon.svg",
+    tag: reminder.id,
+    data: { url: reminder.url },
+  });
+}
+
 export function HaveAGreatDayApp() {
   const [activity, setActivity] = useState<Activity>("walk");
   const [units, setUnits] = useState<Units>("metric");
@@ -416,6 +439,10 @@ export function HaveAGreatDayApp() {
   const [founderOpen, setFounderOpen] = useState(false);
   const [clockTime, setClockTime] = useState(0);
   const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
+  const [notificationState, setNotificationState] = useState<NotificationState>("checking");
+  const [reminders, setReminders] = useState<BrowserReminder[]>([]);
+  const [remindersLoaded, setRemindersLoaded] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState("");
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const founderDetails = useRef<HTMLDetailsElement | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
@@ -545,6 +572,60 @@ export function HaveAGreatDayApp() {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
+
+  useEffect(() => {
+    setReminders(readSavedReminders());
+    setRemindersLoaded(true);
+
+    const refreshNotificationState = () => {
+      const supported = window.isSecureContext && "Notification" in window && "serviceWorker" in navigator;
+      setNotificationState(supported ? Notification.permission : "unsupported");
+    };
+    refreshNotificationState();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshNotificationState();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, []);
+
+  useEffect(() => {
+    if (!remindersLoaded) return;
+    try { localStorage.setItem(REMINDERS_KEY, JSON.stringify(reminders)); } catch { /* Reminders still work for this visit. */ }
+  }, [reminders, remindersLoaded]);
+
+  useEffect(() => {
+    if (!remindersLoaded || notificationState !== "granted") return;
+    let timer = 0;
+
+    const checkReminders = () => {
+      const now = Date.now();
+      const due = reminders.filter((reminder) => reminder.notifyAt <= now && reminder.startAt > now);
+      const expired = reminders.some((reminder) => reminder.startAt <= now);
+      if (due.length || expired) {
+        const completed = new Set(due.map((reminder) => reminder.id));
+        setReminders((current) => current.filter((reminder) => !completed.has(reminder.id) && reminder.startAt > now));
+        for (const reminder of due) {
+          void showBrowserReminder(reminder).catch(() => setReminderMessage("That reminder could not be delivered. Check this browser’s notification settings."));
+        }
+      }
+
+      const next = reminders
+        .filter((reminder) => reminder.notifyAt > now && reminder.startAt > now)
+        .toSorted((first, second) => first.notifyAt - second.notifyAt)[0];
+      if (next) timer = window.setTimeout(checkReminders, Math.min(next.notifyAt - now, 2_147_000_000));
+    };
+
+    checkReminders();
+    const checkWhenVisible = () => {
+      if (document.visibilityState === "visible") checkReminders();
+    };
+    document.addEventListener("visibilitychange", checkWhenVisible);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", checkWhenVisible);
+    };
+  }, [notificationState, reminders, remindersLoaded]);
 
   useEffect(() => {
     const place = query.trim();
