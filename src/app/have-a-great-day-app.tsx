@@ -1055,12 +1055,12 @@ export function HaveAGreatDayApp() {
                   return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span>{protection ? <span className="forecast-conversation__protection"> {protection}</span> : null}</p>;
                 })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>Choose another day above and we’ll look for a better opening.</p></div>}
                 {excludedWindowNotes.length ? <p className="forecast-conversation__tradeoffs">{excludedWindowNotes.join(" ")}</p> : null}
-                {conversationVoice.mode !== "none" && displayedPeriods.length ? <div className="reminder-setting">
-                  <button className="reminder-toggle" type="button" role="switch" aria-checked={currentRemindersEnabled} aria-describedby="reminder-status" disabled={notificationState === "checking" || notificationState === "denied"} onClick={() => void toggleReminders()}>
-                    <span>{currentRemindersEnabled ? "Reminders on" : notificationState === "denied" ? "Notifications blocked" : notificationState === "unsupported" ? "Reminders unavailable" : "Remind me"}</span>
+                {conversationVoice.mode !== "none" && displayedPeriods.length && notificationState !== "checking" && notificationState !== "unsupported" ? <div className="reminder-setting">
+                  <button className="reminder-toggle" type="button" role="switch" aria-checked={currentRemindersEnabled} aria-describedby="reminder-status" disabled={notificationState === "denied"} onClick={() => void toggleReminders()}>
+                    <span>{currentRemindersEnabled ? "Reminders on" : notificationState === "denied" ? "Notifications blocked" : "Remind me"}</span>
                     <span className="reminder-toggle__track" aria-hidden="true"><span/></span>
                   </button>
-                  <p id="reminder-status" role="status">{reminderMessage || (notificationState === "checking" ? "Checking notification support…" : notificationState === "unsupported" ? "On iPhone, add this app to your Home Screen first." : notificationState === "denied" ? "Allow notifications in your browser settings to use reminders." : currentRemindersEnabled ? "15 minutes before each time · keep the app open" : "15 minutes before each time")}</p>
+                  <p id="reminder-status" role="status">{reminderMessage || (notificationState === "denied" ? "Allow notifications in your browser settings to use reminders." : currentRemindersEnabled ? "15 minutes before each time · keep the app open" : "15 minutes before each time")}</p>
                 </div> : null}
               </div>
             </section> : <p className="decision-context">No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</p>}
