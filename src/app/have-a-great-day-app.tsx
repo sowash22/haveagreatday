@@ -599,6 +599,7 @@ export function HaveAGreatDayApp() {
     let timer = 0;
 
     const checkReminders = () => {
+      window.clearTimeout(timer);
       const now = Date.now();
       const due = reminders.filter((reminder) => reminder.notifyAt <= now && reminder.startAt > now);
       const expired = reminders.some((reminder) => reminder.startAt <= now);
@@ -839,7 +840,90 @@ export function HaveAGreatDayApp() {
   const excludedWindowNotes = useMemo(() => conversationVoice?.mode === "none" ? [] : activePeriods
     .filter((period) => !conversationVoice?.selectedIds.includes(period.id) && period.conditions.some((hour) => hour.time > localHour))
     .map((period) => excludedPeriodNote(period, profile, localHour)), [activePeriods, conversationVoice, localHour, profile]);
+  const reminderGroupKey = location && activeDay ? `${location.latitude.toFixed(2)},${location.longitude.toFixed(2)}:${activeDay.date}` : "";
+  const reminderUrl = useMemo(() => {
+    if (!location || !activeDay) return "/";
+    const params = new URLSearchParams({
+      activity,
+      time: timePreference,
+      units,
+      unitMode: unitsOverridden.current ? "override" : "auto",
+      date: activeDay.date,
+      lat: location.latitude.toFixed(2),
+      lon: location.longitude.toFixed(2),
+      place: location.name,
+    });
+    if (location.region) params.set("region", location.region);
+    if (location.country) params.set("country", location.country);
+    if (location.countryCode) params.set("countryCode", location.countryCode);
+    return `/?${params.toString()}`;
+  }, [activeDay, activity, location, timePreference, units]);
+  const plannedReminders = useMemo(() => {
+    if (!forecast || !location || !activeDay || !reminderGroupKey) return [];
+    const now = clockTime || Date.now();
+    return displayedPeriods.flatMap((period): BrowserReminder[] => {
+      const start = selectedHours(period)[0]?.time;
+      const startAt = start ? zonedTimeToEpoch(start, forecast.timezone) : null;
+      if (startAt === null || startAt <= now) return [];
+      return [{
+        id: `${reminderGroupKey}:${period.id}:${startAt}`,
+        groupKey: reminderGroupKey,
+        notifyAt: startAt - REMINDER_LEAD_MS,
+        startAt,
+        place: location.name === "Approximate device location" ? "your area" : location.name,
+        windowLabel: windowLabel(period),
+        url: reminderUrl,
+      }];
+    });
+  }, [activeDay, clockTime, displayedPeriods, forecast, location, reminderGroupKey, reminderUrl]);
+  const currentRemindersEnabled = reminderGroupKey !== "" && reminders.some((reminder) => reminder.groupKey === reminderGroupKey);
+
+  useEffect(() => {
+    setReminderMessage("");
+  }, [reminderGroupKey]);
+
   const sceneHours = selectedHours(activeDay);
+
+  async function toggleReminders() {
+    if (!reminderGroupKey || !activeDay) return;
+    if (currentRemindersEnabled) {
+      setReminders((current) => current.filter((reminder) => reminder.groupKey !== reminderGroupKey));
+      setReminderMessage(`Reminders are off for ${dayName(activeDay.date).toLowerCase()}.`);
+      return;
+    }
+    if (!plannedReminders.length) {
+      setReminderMessage("These outdoor times have already started. Try another day.");
+      return;
+    }
+    if (notificationState === "unsupported") {
+      setReminderMessage("This browser cannot send reminders. On iPhone, add the app to your Home Screen first.");
+      return;
+    }
+
+    let permission = notificationState;
+    if (permission === "default") {
+      try {
+        permission = await Notification.requestPermission();
+        setNotificationState(permission);
+      } catch {
+        setReminderMessage("Notification permission could not be requested in this browser.");
+        return;
+      }
+    }
+    if (permission !== "granted") {
+      setReminderMessage(permission === "denied" ? "Notifications are blocked. Allow them in your browser settings to use reminders." : "Notifications are not ready yet. Try again.");
+      return;
+    }
+
+    try {
+      await navigator.serviceWorker.register("/notification-sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      setReminders((current) => [...current.filter((reminder) => reminder.groupKey !== reminderGroupKey), ...plannedReminders]);
+      setReminderMessage(`Reminders are on for ${dayName(activeDay.date).toLowerCase()}. Keep the app open.`);
+    } catch {
+      setReminderMessage("Reminders could not be started in this browser. Try again after reloading.");
+    }
+  }
 
   function beginDaySwipe(event: ReactTouchEvent<HTMLElement>) {
     daySwipeStart.current = null;
@@ -971,6 +1055,13 @@ export function HaveAGreatDayApp() {
                   return <p role="listitem" key={window.id}><span>{lead} </span><strong>{window.time}</strong><span>. {describeConversationWindow(window)}</span>{protection ? <span className="forecast-conversation__protection"> {protection}</span> : null}</p>;
                 })}</div> : <div className="forecast-conversation__day"><p>{describeConversationDay(conversationInput.assessment.summary)}</p><p>Choose another day above and we’ll look for a better opening.</p></div>}
                 {excludedWindowNotes.length ? <p className="forecast-conversation__tradeoffs">{excludedWindowNotes.join(" ")}</p> : null}
+                {conversationVoice.mode !== "none" && displayedPeriods.length ? <div className="reminder-setting">
+                  <button className="reminder-toggle" type="button" role="switch" aria-checked={currentRemindersEnabled} aria-describedby="reminder-status" disabled={notificationState === "checking" || notificationState === "denied"} onClick={() => void toggleReminders()}>
+                    <span>{currentRemindersEnabled ? "Reminders on" : notificationState === "denied" ? "Notifications blocked" : notificationState === "unsupported" ? "Reminders unavailable" : "Remind me"}</span>
+                    <span className="reminder-toggle__track" aria-hidden="true"><span/></span>
+                  </button>
+                  <p id="reminder-status" role="status">{reminderMessage || (notificationState === "checking" ? "Checking notification support…" : notificationState === "unsupported" ? "On iPhone, add this app to your Home Screen first." : notificationState === "denied" ? "Allow notifications in your browser settings to use reminders." : currentRemindersEnabled ? "15 minutes before each time · keep the app open" : "15 minutes before each time")}</p>
+                </div> : null}
               </div>
             </section> : <p className="decision-context">No outdoor window remains for {dayName(activeDay.date).toLowerCase()}. Choose another day to keep planning.</p>}
           </> : null}
