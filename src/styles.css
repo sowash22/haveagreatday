@@ -365,7 +365,5 @@ input[type="search"][aria-invalid="true"] { border-color: var(--color-error); ba
   .place-control,
   .unit-toggle,
   .week-times,
-  .decision-copy,
   .method-details > summary { background: rgb(18 29 21 / 96%); backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .method-details__body { background: rgb(18 29 21 / 98%); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
