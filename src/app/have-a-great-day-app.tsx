@@ -2,7 +2,7 @@
 
 import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type TouchEvent as ReactTouchEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assessAdaptiveDay } from "../adaptive-plan";
 import { describeConversationDay, describeConversationWindow, fallbackConversationVoice, parseConversationVoice, type ConversationDaySummary, type ConversationInput, type ConversationVoice } from "../conversation";
 import { locationMatchesQuery, rankLocationSuggestions } from "../location-search";
@@ -423,6 +423,7 @@ export function HaveAGreatDayApp() {
   const suggestionController = useRef<AbortController | null>(null);
   const forecastController = useRef<AbortController | null>(null);
   const conversationController = useRef<AbortController | null>(null);
+  const daySwipeStart = useRef<{ x: number; y: number } | null>(null);
   const unitsOverridden = useRef(false);
   const profile = ACTIVITIES[activity].profile;
 
@@ -758,6 +759,51 @@ export function HaveAGreatDayApp() {
     .filter((period) => !conversationVoice?.selectedIds.includes(period.id) && period.conditions.some((hour) => hour.time > localHour))
     .map((period) => excludedPeriodNote(period, profile, localHour)), [activePeriods, conversationVoice, localHour, profile]);
   const sceneHours = selectedHours(activeDay);
+
+  function beginDaySwipe(event: ReactTouchEvent<HTMLElement>) {
+    daySwipeStart.current = null;
+    if (founderOpen || event.touches.length !== 1) return;
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button, a, summary, input, dialog")) return;
+
+    const touch = event.touches[0];
+    if (!touch) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const edgeGuard = 24;
+    if (touch.clientX - bounds.left < edgeGuard || bounds.right - touch.clientX < edgeGuard) return;
+
+    daySwipeStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function finishDaySwipe(event: ReactTouchEvent<HTMLElement>) {
+    const start = daySwipeStart.current;
+    daySwipeStart.current = null;
+    if (!start || founderOpen || !activeDay) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
+
+    const availableDates = calendarDates.filter((date) => {
+      const day = plansByDate.get(date);
+      return date >= currentDate && day !== undefined && day.score !== null;
+    });
+    const currentIndex = availableDates.indexOf(activeDay.date);
+    if (currentIndex < 0) return;
+
+    const direction = deltaX < 0 ? 1 : -1;
+    const nextDate = availableDates[currentIndex + direction];
+    if (nextDate) chooseDate(nextDate);
+  }
+
+  function cancelDaySwipe() {
+    daySwipeStart.current = null;
+  }
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
   const scenePool = SCENE_POOLS[sceneKey];
@@ -807,7 +853,7 @@ export function HaveAGreatDayApp() {
   return <div className="experience-root">
     <a className="skip-link" href="#main">Skip to planner</a>
     <main id="main" className="single-screen">
-      <section className="decision-card" data-scene={sceneKey} data-founder-open={founderOpen || undefined} aria-labelledby={founderOpen ? "founder-title" : "decision-title"}>
+      <section className="decision-card" data-scene={sceneKey} data-founder-open={founderOpen || undefined} aria-labelledby={founderOpen ? "founder-title" : "decision-title"} onTouchStart={beginDaySwipe} onTouchEnd={finishDaySwipe} onTouchCancel={cancelDaySwipe}>
         <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" loader={isUnsplashScene(scene.src) ? unsplashImageLoader : undefined} onError={isUnsplashScene(scene.src) ? () => setFailedSceneSrc(scene.src) : undefined} style={scene.position ? { objectPosition: scene.position } : undefined}/>
         <div className="decision-card__scrim" aria-hidden="true"/>
 
