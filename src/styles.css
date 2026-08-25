@@ -145,6 +145,7 @@ small, time, dd { font-variant-numeric: tabular-nums; }
 .week-times button span { font-size: var(--text-xs); font-weight: 680; }
 .week-times button[data-selected="true"] { background: #fff; color: #18221b; }
 .week-times button:disabled { color: rgb(255 255 255 / 38%); }
+.week-times button[data-passed="true"] { color: rgb(255 255 255 / 28%); cursor: not-allowed; }
 .week-times button:focus-visible { position: relative; z-index: 1; outline-offset: -3px; }
 
 .decision-copy {

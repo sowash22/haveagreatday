@@ -414,6 +414,7 @@ export function HaveAGreatDayApp() {
   const [sceneSequence, setSceneSequence] = useState(0);
   const [failedSceneSrc, setFailedSceneSrc] = useState("");
   const [founderOpen, setFounderOpen] = useState(false);
+  const [clockTime, setClockTime] = useState(0);
   const [conversationResult, setConversationResult] = useState<{ key: string; voice: ConversationVoice } | null>(null);
   const placeDialog = useRef<HTMLDialogElement | null>(null);
   const founderDetails = useRef<HTMLDetailsElement | null>(null);
@@ -527,6 +528,20 @@ export function HaveAGreatDayApp() {
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsidePress);
       document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshClock = () => setClockTime(Date.now());
+    refreshClock();
+    const interval = window.setInterval(refreshClock, 60_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshClock();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
 
@@ -670,11 +685,12 @@ export function HaveAGreatDayApp() {
     setForgotten(true);
   }
 
-  const localHour = forecast ? currentHourInTimezone(forecast.timezone) : "";
+  const localHour = forecast ? currentHourInTimezone(forecast.timezone, clockTime ? new Date(clockTime) : new Date()) : "";
+  const currentDate = localHour.slice(0, 10);
   const dayPlans = useMemo(() => forecast ? recommendDays(forecast.conditions, profile, localHour, timePreference) : [], [forecast, profile, localHour, timePreference]);
   const rankedDays = useMemo(() => dayPlans.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100)), [dayPlans]);
   const topDay = rankedDays[0];
-  const activeDay = dayPlans.find((day) => day.date === selectedDate) ?? topDay ?? dayPlans[0];
+  const activeDay = dayPlans.find((day) => day.date === selectedDate && day.score !== null) ?? topDay ?? dayPlans.find((day) => day.date >= currentDate) ?? dayPlans.at(-1);
   const activePeriods = useMemo(() => forecast && activeDay ? periodPlans(forecast.conditions, activeDay.date, profile, localHour) : [], [activeDay, forecast, localHour, profile]);
   const rankedPeriods = useMemo(() => activePeriods
     .filter((period) => period.score !== null)
@@ -689,7 +705,6 @@ export function HaveAGreatDayApp() {
   }, [activeDay, forecast, localHour]);
   const adaptiveDecision = useMemo(() => assessAdaptiveDay(planningHours, rankedPeriods.map((period) => ({ id: period.id, score: period.score, hours: selectedHours(period) })), profile), [planningHours, profile, rankedPeriods]);
   const recommendedPeriods = useMemo(() => adaptiveDecision.candidateIds.flatMap((id) => rankedPeriods.find((period) => period.id === id) ?? []), [adaptiveDecision.candidateIds, rankedPeriods]);
-  const currentDate = localHour.slice(0, 10);
   const tomorrow = currentDate ? new Date(`${currentDate}T12:00:00Z`).getTime() + 86_400_000 : 0;
   const dayName = (date: string) => date === currentDate ? "Today" : tomorrow && date === new Date(tomorrow).toISOString().slice(0, 10) ? "Tomorrow" : formatTime(`${date}T12:00`, { weekday: "long" });
   const activeDayLabel = activeDay ? dayName(activeDay.date) : "";
@@ -799,8 +814,10 @@ export function HaveAGreatDayApp() {
         </header>
 
         {status.kind === "ready" && activeDay ? <div className="week-overview"><p>The week ahead</p><div className="week-times" role="group" aria-label="Choose a day in the next week">{dayPlans.map((day) => {
-          const selectable = day.conditions.length > 0;
-          return <button type="button" key={day.date} disabled={!selectable} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={dayName(day.date)} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" })}</span></button>;
+          const selectable = day.score !== null;
+          const passed = day.date < currentDate;
+          const label = passed ? `${dayName(day.date)}, already passed` : !selectable ? `${dayName(day.date)}, no outdoor time remaining` : dayName(day.date);
+          return <button type="button" key={day.date} disabled={!selectable} data-passed={passed || undefined} data-selected={day.date === activeDay.date || undefined} aria-pressed={day.date === activeDay.date} aria-label={label} onClick={() => chooseDate(day.date)}><span>{formatTime(`${day.date}T12:00`, { weekday: "short" })}</span></button>;
         })}</div></div> : null}
 
         <div className="decision-copy" aria-live="polite" aria-hidden={founderOpen || undefined}>

@@ -126,4 +126,20 @@ describe("recommendation windows", () => {
     expect(plans[0]?.conditions.map((hour) => hour.time)).toEqual(["2026-08-23T18:00", "2026-08-23T19:00"]);
     expect(plans[0]?.score).toBeLessThan(plans[1]?.score ?? 100);
   });
+
+  it("leaves elapsed days and earlier same-day hours out of the recommendation", () => {
+    const hours = [
+      completeHour("2026-08-22T16:00"),
+      completeHour("2026-08-22T17:00"),
+      completeHour("2026-08-23T08:00"),
+      completeHour("2026-08-23T09:00"),
+      completeHour("2026-08-23T15:00"),
+      completeHour("2026-08-23T16:00"),
+    ];
+
+    const plans = recommendDays(hours, "general", "2026-08-23T13:00", "any");
+    expect(plans[0]?.score).toBeNull();
+    expect(plans[1]?.recommendation.hours).toEqual([2, 3]);
+    expect(plans[1]?.recommendation.hours.map((index) => plans[1]?.conditions[index]?.time)).toEqual(["2026-08-23T15:00", "2026-08-23T16:00"]);
+  });
 });
