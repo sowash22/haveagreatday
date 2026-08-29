@@ -1072,11 +1072,11 @@ export function HaveAGreatDayApp() {
             <details ref={founderDetails} className="method-details" onToggle={(event) => setFounderOpen(event.currentTarget.open)}>
               <summary>Why I built this</summary>
               <div className="method-details__body founder-note">
-                <header className="founder-note__header"><h2 id="founder-title">A simple question</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
+                <header className="founder-note__header"><h2 id="founder-title">Weather, without the data overload.</h2><button className="sheet-close" type="button" onClick={() => closeDisclosure(founderDetails.current)}>Close</button></header>
                 <div className="founder-note__story">
-                  <p>My daughter is always ready for the park. When my mom asks, “What time should I take her?” I usually have to compare a lot of weather data before I can answer.</p>
-                  <p>Have a Great Day does that work for me. It brings together weather, comfort, UV, air quality, and daylight to find a few practical times to step outside.</p>
-                  <p>I built it for my family. I hope it helps yours too.</p>
+                  <p>My daughter is always ready for the park, and my mom often asks, “What time should I take her?”</p>
+                  <p>I used to open the forecast and compare rain, how the temperature feels, UV, air quality, and daylight before giving her an answer.</p>
+                  <p>So I built Have a Great Day to do that work and suggest a few practical times. It started with my family, and I hope it makes time outside easier for yours.</p>
                 </div>
               </div>
             </details>
