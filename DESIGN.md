@@ -25,7 +25,7 @@ Location search opens a focused dialog. Recent places appear first, followed by 
 
 ## Photography
 
-Use seven-photo curated Unsplash scene pools for each weather family, mixing local fallbacks with responsive direct Unsplash image loads. Clear or fair conditions use active outdoor scenes. Cloud, rain, and snow forecasts override them with matching weather scenes. Advance the pool only on refresh and day selection so a full week of similar weather still feels varied. Crop with `object-fit: cover`, tune subject position per scene, fall back to the local scene after a remote error, and keep the current photographer credit visible at the bottom right of the image.
+Use curated Unsplash scene pools for each weather family, mixing bundled fallbacks with responsive direct Unsplash image loads. Each location receives a stable subset and starting point from the catalog, so changing cities feels fresh without adding a photo API or delaying the forecast. Clear or fair conditions use active outdoor scenes. Cloud, rain, and snow forecasts override them with matching weather scenes. Advance the location's pool only on refresh and day selection so a full week of similar weather still feels varied. Crop with `object-fit: cover`, tune subject position per scene, fall back to the bundled scene after a remote error, and keep the current photographer credit visible at the bottom right of the image.
 
 ## Motion
 

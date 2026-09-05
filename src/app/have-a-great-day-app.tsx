@@ -46,6 +46,7 @@ type NotificationState = "checking" | "unsupported" | NotificationPermission;
 type Scene = { src: string; photographer: string; href: string; position?: string };
 
 const UNSPLASH_VIEW_ID = "M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA==";
+const UNSPLASH_ATTRIBUTION_URL = "https://unsplash.com/?utm_source=haveagreatday&utm_medium=referral";
 
 function unsplashScene(imageId: string, photographer: string, photoId: string, position?: string): Scene {
   const url = new URL(`https://images.unsplash.com/${imageId}`);
@@ -95,7 +96,7 @@ const SCENE_POOLS: Record<SceneKey, readonly Scene[]> = {
   run: [BASE_SCENES.run, ...CLEAR_SCENES],
   cycle: [BASE_SCENES.cycle, ...CLEAR_SCENES],
   family: [BASE_SCENES.family, ...CLEAR_SCENES],
-  dog: [BASE_SCENES.dog, CLEAR_DOGWALK, CLEAR_SUNPATH],
+  dog: [BASE_SCENES.dog, ...CLEAR_SCENES],
   cloudy: [
     BASE_SCENES.cloudy,
     { src: "/scene-cloudy-autumn.jpg", photographer: "Gennady Zakharin", href: "https://unsplash.com/photos/O2CVeC8zyFs", position: "center 54%" },
@@ -156,6 +157,14 @@ function nextSceneSequence(): number {
   } catch {
     return Date.now();
   }
+}
+
+function locationSceneOffset(location: LocationChoice | null, sceneKey: SceneKey, poolLength: number): number {
+  if (!location || poolLength < 2) return 0;
+  const identity = `${location.name}|${location.region}|${location.country}|${location.latitude.toFixed(2)}|${location.longitude.toFixed(2)}|${sceneKey}`;
+  let hash = 2_166_136_261;
+  for (const character of identity) hash = Math.imul(hash ^ character.charCodeAt(0), 16_777_619);
+  return (hash >>> 0) % poolLength;
 }
 
 function readChoice<T extends string>(key: string, choices: readonly T[], fallback: T): T {
@@ -971,7 +980,12 @@ export function HaveAGreatDayApp() {
   }
   const representativeWeather = sceneHours.find((hour) => hour.weatherCode !== null)?.weatherCode ?? null;
   const sceneKey = weatherScene(activity, representativeWeather);
-  const scenePool = SCENE_POOLS[sceneKey];
+  const scenePool = useMemo<readonly Scene[]>(() => {
+    const catalog = SCENE_POOLS[sceneKey];
+    if (!location || catalog.length <= 4) return catalog;
+    const offset = locationSceneOffset(location, sceneKey, catalog.length);
+    return Array.from({ length: 4 }, (_, index) => catalog[(offset + index) % catalog.length] ?? BASE_SCENES[sceneKey]);
+  }, [location, sceneKey]);
   const sceneIndex = Math.abs(sceneSequence) % scenePool.length;
   const sceneCandidate = scenePool[sceneIndex] ?? BASE_SCENES[sceneKey];
   const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
@@ -1012,14 +1026,14 @@ export function HaveAGreatDayApp() {
       image.srcset = widths.map((width) => `/_next/image?url=${source}&w=${width}&q=75 ${width}w`).join(", ");
       image.src = `/_next/image?url=${source}&w=1200&q=75`;
     }
-    image.sizes = "(max-width: 1248px) 100vw, 1216px";
+    image.sizes = "100vw";
   }, [scene.src, sceneIndex, scenePool]);
 
   return <div className="experience-root">
     <a className="skip-link" href="#main">Skip to planner</a>
     <main id="main" className="single-screen">
       <section className="decision-card" data-scene={sceneKey} data-founder-open={founderOpen || undefined} aria-labelledby={founderOpen ? "founder-title" : "decision-title"} onTouchStart={beginDaySwipe} onTouchEnd={finishDaySwipe} onTouchCancel={cancelDaySwipe}>
-        <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="(max-width: 1248px) 100vw, 1216px" fetchPriority="high" loader={isUnsplashScene(scene.src) ? unsplashImageLoader : undefined} onError={isUnsplashScene(scene.src) ? () => setFailedSceneSrc(scene.src) : undefined} style={scene.position ? { objectPosition: scene.position } : undefined}/>
+        <Image key={scene.src} className="decision-card__image" src={scene.src} alt="" aria-hidden="true" fill sizes="100vw" fetchPriority="high" loader={isUnsplashScene(scene.src) ? unsplashImageLoader : undefined} onError={isUnsplashScene(scene.src) ? () => setFailedSceneSrc(scene.src) : undefined} style={scene.position ? { objectPosition: scene.position } : undefined}/>
         <div className="decision-card__scrim" aria-hidden="true"/>
 
         <header className="card-bar">
@@ -1081,7 +1095,7 @@ export function HaveAGreatDayApp() {
               </div>
             </details>
           </div>
-          <p className="photo-credit">Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on Unsplash</p>
+          <p className="photo-credit">Photo by <a href={scene.href} rel="noreferrer">{scene.photographer}</a> on <a href={UNSPLASH_ATTRIBUTION_URL} rel="noreferrer">Unsplash</a></p>
         </div>
       </section>
     </main>
