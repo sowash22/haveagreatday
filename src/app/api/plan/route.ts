@@ -37,7 +37,8 @@ export async function GET(request: Request) {
     const query = parsePlanQuery(new URL(request.url).searchParams);
     const forecast = await fetchForecast(query.latitude, query.longitude);
     const currentLocalHour = currentHourInTimezone(forecast.timezone);
-    const calendarDateSet = new Set(calendarWeekDates(currentLocalHour.slice(0, 10)));
+    const currentDate = currentLocalHour.slice(0, 10);
+    const calendarDateSet = new Set([...calendarWeekDates(currentDate), ...calendarWeekDates(currentDate, 1)]);
     const days = recommendDays(forecast.conditions, ACTIVITIES[query.activity].profile, currentLocalHour, query.time).filter((day) => calendarDateSet.has(day.date));
     const ranked = days.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100));
     const selected = query.date ? days.find((day) => day.date === query.date) : ranked[0] ?? days[0];

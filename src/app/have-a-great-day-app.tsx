@@ -430,6 +430,7 @@ export function HaveAGreatDayApp() {
   const [units, setUnits] = useState<Units>("metric");
   const [timePreference, setTimePreference] = useState<TimePreference>("any");
   const [selectedDate, setSelectedDate] = useState("");
+  const [weekOffset, setWeekOffset] = useState<0 | 1>(0);
   const [location, setLocation] = useState<LocationChoice | null>(null);
   const [savedLocations, setSavedLocations] = useState<LocationChoice[]>([]);
   const [forecast, setForecast] = useState<ForecastResult | null>(null);
@@ -482,6 +483,7 @@ export function HaveAGreatDayApp() {
     setLocation(rounded);
     setForecast(null);
     setSelectedDate(date);
+    setWeekOffset(0);
     setSearchResults([]);
     setSearchMessage(`Showing forecast for ${locationLabel(rounded)}.`);
     setForgotten(false);
@@ -779,16 +781,41 @@ export function HaveAGreatDayApp() {
 
   const localHour = forecast ? currentHourInTimezone(forecast.timezone, clockTime ? new Date(clockTime) : new Date()) : "";
   const currentDate = localHour.slice(0, 10);
-  const calendarDates = useMemo(() => currentDate ? calendarWeekDates(currentDate) : [], [currentDate]);
+  const calendarDates = useMemo(() => currentDate ? calendarWeekDates(currentDate, weekOffset) : [], [currentDate, weekOffset]);
+  const planningCalendarDates = useMemo(() => currentDate ? [...calendarWeekDates(currentDate), ...calendarWeekDates(currentDate, 1)] : [], [currentDate]);
   const dayPlans = useMemo(() => {
-    if (!forecast || !calendarDates.length) return [];
-    const calendarDateSet = new Set(calendarDates);
+    if (!forecast || !planningCalendarDates.length) return [];
+    const calendarDateSet = new Set(planningCalendarDates);
     return recommendDays(forecast.conditions, profile, localHour, timePreference).filter((day) => calendarDateSet.has(day.date));
-  }, [calendarDates, forecast, localHour, profile, timePreference]);
+  }, [forecast, localHour, planningCalendarDates, profile, timePreference]);
   const plansByDate = useMemo(() => new Map(dayPlans.map((day) => [day.date, day])), [dayPlans]);
-  const rankedDays = useMemo(() => dayPlans.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100)), [dayPlans]);
+  const visibleDayPlans = useMemo(() => {
+    const calendarDateSet = new Set(calendarDates);
+    return dayPlans.filter((day) => calendarDateSet.has(day.date));
+  }, [calendarDates, dayPlans]);
+  const rankedDays = useMemo(() => visibleDayPlans.filter((day) => day.score !== null).toSorted((a, b) => (a.score ?? 100) - (b.score ?? 100)), [visibleDayPlans]);
   const topDay = rankedDays[0];
-  const activeDay = dayPlans.find((day) => day.date === selectedDate && day.score !== null) ?? topDay ?? dayPlans.find((day) => day.date >= currentDate) ?? dayPlans.at(-1);
+  const activeDay = visibleDayPlans.find((day) => day.date === selectedDate && day.score !== null) ?? topDay ?? visibleDayPlans.find((day) => day.date >= currentDate) ?? visibleDayPlans.at(-1);
+
+  useEffect(() => {
+    if (!currentDate || !selectedDate) return;
+    if (calendarWeekDates(currentDate, 1).includes(selectedDate)) setWeekOffset(1);
+    else if (calendarWeekDates(currentDate).includes(selectedDate)) setWeekOffset(0);
+  }, [currentDate, selectedDate]);
+
+  function chooseWeek(nextOffset: 0 | 1) {
+    if (nextOffset === weekOffset || !currentDate) return;
+    const dates = new Set(calendarWeekDates(currentDate, nextOffset));
+    const candidates = dayPlans.filter((day) => dates.has(day.date) && day.date >= currentDate);
+    const nextDay = candidates
+      .filter((day) => day.score !== null)
+      .toSorted((first, second) => (first.score ?? 100) - (second.score ?? 100))[0] ?? candidates[0];
+    updateWithTransition(() => {
+      setWeekOffset(nextOffset);
+      setSelectedDate(nextDay?.date ?? "");
+      advanceScene();
+    });
+  }
   const activePeriods = useMemo(() => forecast && activeDay ? periodPlans(forecast.conditions, activeDay.date, profile, localHour) : [], [activeDay, forecast, localHour, profile]);
   const rankedPeriods = useMemo(() => activePeriods
     .filter((period) => period.score !== null)
@@ -1044,7 +1071,7 @@ export function HaveAGreatDayApp() {
           </div>
         </header>
 
-        {status.kind === "ready" && activeDay ? <div className="week-overview"><p>This week</p><div className="week-times" role="group" aria-label="Choose a day this week">{calendarDates.map((date) => {
+        {status.kind === "ready" && activeDay ? <div className="week-overview"><div className="week-switch" role="group" aria-label="Choose a week"><button type="button" aria-pressed={weekOffset === 0} data-selected={weekOffset === 0 || undefined} onClick={() => chooseWeek(0)}>This week</button><button type="button" aria-pressed={weekOffset === 1} data-selected={weekOffset === 1 || undefined} onClick={() => chooseWeek(1)}>Next week</button></div><div className="week-times" role="group" aria-label={`Choose a day ${weekOffset === 0 ? "this week" : "next week"}`}>{calendarDates.map((date) => {
           const day = plansByDate.get(date);
           const passed = date < currentDate;
           const selectable = !passed && day?.score !== null && day !== undefined;

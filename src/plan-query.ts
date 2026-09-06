@@ -18,11 +18,11 @@ export const TIME_OPTIONS: Record<TimePreference, string> = {
 export type Activity = keyof typeof ACTIVITIES;
 export type SceneKey = Activity | "cloudy" | "rain" | "snow";
 
-export function calendarWeekDates(date: string): string[] {
+export function calendarWeekDates(date: string, weekOffset = 0): string[] {
   const current = new Date(`${date}T12:00:00Z`);
-  if (Number.isNaN(current.getTime())) return [];
+  if (Number.isNaN(current.getTime()) || !Number.isInteger(weekOffset)) return [];
   const daysSinceMonday = (current.getUTCDay() + 6) % 7;
-  const monday = current.getTime() - daysSinceMonday * 86_400_000;
+  const monday = current.getTime() - daysSinceMonday * 86_400_000 + weekOffset * 7 * 86_400_000;
   return Array.from({ length: 7 }, (_, index) => new Date(monday + index * 86_400_000).toISOString().slice(0, 10));
 }
 
