@@ -1,9 +1,14 @@
 import { aqiCategory, uvCategory, type HourConditions } from "./suitability.ts";
 
+// These sets use Open-Meteo's WMO weather codes. They describe forecast
+// signals for the agent; the application's blocking and suitability rules
+// remain centralized in adaptive-plan.ts and suitability.ts.
 const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]);
 const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
 const STORM_CODES = new Set([95, 96, 99]);
 
+// Forecast providers can return null for an unavailable measurement. Keeping
+// null here lets the model distinguish "unavailable" from a real zero value.
 function maximum(values: Array<number | null>): number | null {
   const present = values.filter((value): value is number => value !== null);
   return present.length ? Math.max(...present) : null;
@@ -24,6 +29,7 @@ export function weatherEvidence(hours: HourConditions[]) {
   };
 }
 
+/** Project only AQI fields from the shared forecast for the AQI tool. */
 export function airQualityEvidence(hours: HourConditions[]) {
   const peak = maximum(hours.map((hour) => hour.usAqi));
   return {
@@ -33,6 +39,7 @@ export function airQualityEvidence(hours: HourConditions[]) {
   };
 }
 
+/** Project only UV fields from the shared forecast for the UV tool. */
 export function uvEvidence(hours: HourConditions[]) {
   const peak = maximum(hours.map((hour) => hour.uvIndex));
   return {
@@ -42,6 +49,10 @@ export function uvEvidence(hours: HourConditions[]) {
   };
 }
 
+/**
+ * Analyze weather hazards without asking the language model to calculate
+ * thresholds. This is descriptive evidence, not a medical or safety verdict.
+ */
 export function conditionAnalysis(hours: HourConditions[]) {
   const timesFor = (matches: (hour: HourConditions) => boolean) => hours.filter(matches).map((hour) => hour.time);
   return {

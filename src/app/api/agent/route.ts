@@ -9,6 +9,8 @@ const MAX_REQUEST_BYTES = 8_000;
 const AGENT_TIMEOUT_MS = 25_000;
 const TOOL_NAMES = ["get_weather", "get_air_quality", "get_uv_index", "analyze_conditions"] as const;
 
+// The agent's final object deliberately matches ConversationVoice. That means
+// the existing parser remains the last line of defense for model-generated text.
 const voiceSchema = z.object({
   mode: z.enum(["all_day", "windows", "none"]),
   opening: z.string().max(180),
@@ -55,6 +57,8 @@ function parseAgentInput(value: unknown): AgentInput | null {
 }
 
 function toolsFor(input: AgentInput, signal: AbortSignal, calledTools: string[]) {
+  // Every tool reads the same lazy promise. The four tool names expose useful
+  // capabilities to the agent while avoiding duplicate Open-Meteo requests.
   let forecastPromise: Promise<ForecastResult> | null = null;
   const forecast = () => forecastPromise ??= fetchForecast(input.latitude, input.longitude, signal);
   const selectedHours = async () => {
@@ -70,6 +74,8 @@ function toolsFor(input: AgentInput, signal: AbortSignal, calledTools: string[])
 
   return [
     tool(async () => {
+      // Tool arguments are intentionally empty: coordinates and date come
+      // from the validated request, not from model-authored arguments.
       used("get_weather");
       return weatherEvidence(await selectedHours());
     }, { name: "get_weather", description: "Get apparent temperature, weather codes, and daylight for the selected place and date.", schema: empty }),
@@ -82,6 +88,8 @@ function toolsFor(input: AgentInput, signal: AbortSignal, calledTools: string[])
       return uvEvidence(await selectedHours());
     }, { name: "get_uv_index", description: "Get hourly and peak UV index for the selected place and date.", schema: empty }),
     tool(async () => {
+      // This tool combines raw hazard signals with the app's already-computed
+      // presentation guardrails and candidate windows.
       used("analyze_conditions");
       return {
         hazards: conditionAnalysis(await selectedHours()),
@@ -95,6 +103,8 @@ function toolsFor(input: AgentInput, signal: AbortSignal, calledTools: string[])
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // This route is public, so validate origin, size, JSON, coordinates, and the
+  // grounded conversation payload before creating an agent or calling a model.
   if (request.headers.get("sec-fetch-site") === "cross-site") return Response.json({ error: "Cross-site requests are not allowed." }, { status: 403 });
 
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
@@ -115,6 +125,8 @@ export async function POST(request: Request): Promise<Response> {
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(AGENT_TIMEOUT_MS)]);
   const calledTools: string[] = [];
   try {
+    // createAgent supplies LangGraph's ReAct loop: the model chooses tools,
+    // receives their results, and repeats until it produces structured output.
     const agent = createAgent({
       model: new ChatOpenAI({
         apiKey,
@@ -129,6 +141,8 @@ export async function POST(request: Request): Promise<Response> {
     const result = await agent.invoke({
       messages: [{ role: "user", content: `Plan ${parsed.input.day.toLowerCase()} in ${parsed.input.place} for ${parsed.input.date}.` }],
     }, { recursionLimit: 12, signal });
+    // A successful answer is not enough for this showcase: require evidence
+    // from every demonstrated tool before accepting the model's response.
     if (!TOOL_NAMES.every((name) => calledTools.includes(name))) return Response.json({ error: "The planning agent did not inspect every condition." }, { status: 502 });
 
     const voice = parseConversationVoice(result.structuredResponse, parsed.input);
