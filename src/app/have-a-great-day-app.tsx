@@ -1018,27 +1018,38 @@ export function HaveAGreatDayApp() {
   const scene = failedSceneSrc === sceneCandidate.src ? BASE_SCENES[sceneKey] : sceneCandidate;
   useEffect(() => {
     conversationController.current?.abort();
-    if (!conversationInput || !conversationKey) return;
+    if (!conversationInput || !conversationKey || !location) return;
 
     const controller = new AbortController();
     conversationController.current = controller;
+    const requests = [
+      { url: "/api/agent/", body: JSON.stringify({ ...conversationInput, latitude: location.latitude, longitude: location.longitude }) },
+      { url: "/api/conversation/", body: conversationKey },
+    ];
     void (async () => {
-      try {
-        const response = await fetch("/api/conversation/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: conversationKey,
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const voice = parseConversationVoice(await response.json(), conversationInput);
-        if (voice && !controller.signal.aborted) setConversationResult({ key: conversationKey, voice });
-      } catch { /* The grounded, deterministic note remains visible. */ }
+      for (const { url, body } of requests) {
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body,
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (!response.ok) continue;
+          const voice = parseConversationVoice(await response.json(), conversationInput);
+          if (voice && !controller.signal.aborted) {
+            setConversationResult({ key: conversationKey, voice });
+            return;
+          }
+        } catch {
+          if (controller.signal.aborted) return;
+        }
+      }
     })();
 
     return () => controller.abort();
-  }, [conversationInput, conversationKey]);
+  }, [conversationInput, conversationKey, location]);
 
   useEffect(() => {
     const nextScene = scenePool[(sceneIndex + 1) % scenePool.length];

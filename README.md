@@ -29,7 +29,13 @@ npm run build
 - The browser and public forecast endpoint use the same weights and thresholds in [PRD.md](./PRD.md).
 - Only profile, units, and an optional recent rounded location are stored locally.
 
-There is no account system, application database, advertising, analytics, or paid AI dependency.
+There is no account system, application database, advertising, or required paid AI dependency.
+
+## Agentic planner
+
+When `OPENAI_API_KEY` is configured, `/api/agent` runs a LangGraph-backed ReAct agent with four tools: weather, air quality, UV index, and deterministic condition analysis. All tools share one forecast load, and the final response must pass the same application validation as the existing `/api/conversation` endpoint.
+
+The browser tries the agent first, keeps `/api/conversation` as its inference fallback, and always retains the immediate deterministic fallback.
 
 ## URLs and agents
 
